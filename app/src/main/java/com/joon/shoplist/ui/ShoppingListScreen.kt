@@ -10,9 +10,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -38,12 +41,24 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
     val context = LocalContext.current
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var showClearDialog by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<ShoppingItem?>(null) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("쇼핑 체크리스트") },
+                actions = {
+                    IconButton(onClick = { viewModel.navigateTo(Screen.HistoryList) }) {
+                        Icon(Icons.Default.DateRange, contentDescription = "저장 기록")
+                    }
+                    IconButton(
+                        onClick = { showClearDialog = true },
+                        enabled = items.isNotEmpty()
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "클리어")
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -100,6 +115,20 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                 viewModel.addItem(name)
                 showAddDialog = false
             }
+        )
+    }
+
+    if(showClearDialog) {
+        ClearDialog(
+            onSaveAndClear = {
+                showClearDialog = false
+                viewModel.saveAndClear()
+            },
+            onClearOnly = {
+                showClearDialog = false
+                viewModel.clearAll()
+            },
+            onDismiss = { showClearDialog = false }
         )
     }
 
