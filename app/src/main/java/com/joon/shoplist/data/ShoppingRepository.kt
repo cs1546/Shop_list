@@ -25,6 +25,14 @@ class ShoppingRepository(
         dao.delete(item)
     }
 
+    suspend fun restore(item: ShoppingItem) {
+        dao.insert(item.copy(id = 0))
+    }
+
+    suspend fun restoreAll(items: List<ShoppingItem>) {
+        items.forEach { dao.insert(it.copy(id = 0)) }
+    }
+
     suspend fun clearAll() {
         dao.deleteAll()
     }

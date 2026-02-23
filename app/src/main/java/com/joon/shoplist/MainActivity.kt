@@ -13,6 +13,7 @@ import com.joon.shoplist.data.ShoppingRepository
 import com.joon.shoplist.ui.HistoryDetailScreen
 import com.joon.shoplist.ui.HistoryListScreen
 import com.joon.shoplist.ui.Screen
+import com.joon.shoplist.ui.SettingsScreen
 import com.joon.shoplist.ui.ShoppingListScreen
 import com.joon.shoplist.ui.ShoppingViewModel
 import com.joon.shoplist.ui.theme.ShopListTheme
@@ -27,7 +28,7 @@ class MainActivity : ComponentActivity() {
         val repository = ShoppingRepository(db.shoppingDao(), db.historyDao())
         val viewModel = ViewModelProvider(
             this,
-            ShoppingViewModel.Factory(repository)
+            ShoppingViewModel.Factory(repository, applicationContext)
         )[ShoppingViewModel::class.java]
 
         setContent {
@@ -42,6 +43,7 @@ class MainActivity : ComponentActivity() {
                     is Screen.ShoppingList -> ShoppingListScreen(viewModel)
                     is Screen.HistoryList -> HistoryListScreen(viewModel)
                     is Screen.HistoryDetail -> HistoryDetailScreen(viewModel, s.date)
+                    is Screen.Settings -> SettingsScreen(viewModel)
                 }
             }
         }

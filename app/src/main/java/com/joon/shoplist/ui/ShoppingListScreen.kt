@@ -12,16 +12,22 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,17 +44,38 @@ import com.joon.shoplist.util.SearchUrlHelper
 @Composable
 fun ShoppingListScreen(viewModel: ShoppingViewModel) {
     val items by viewModel.items.collectAsState()
+    val defaultStore by viewModel.defaultStore.collectAsState()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<ShoppingItem?>(null) }
+
+    LaunchedEffect(Unit) {
+        viewModel.undoEvent.collect { event ->
+            val message = when(event) {
+                is UndoEvent.Single -> "'${event.item.name}' 삭제됨"
+                is UndoEvent.ClearAll -> "${event.items.size}개 항목 삭제됨"
+            }
+            val result = snackbarHostState.showSnackbar(
+                message = message,
+                actionLabel = "되돌리기",
+                duration = SnackbarDuration.Short
+            )
+            if(result == SnackbarResult.ActionPerformed)
+                viewModel.undoDelete(event)
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("쇼핑 체크리스트") },
                 actions = {
+                    IconButton(onClick = { viewModel.navigateTo(Screen.Settings) }) {
+                        Icon(Icons.Default.Settings, contentDescription = "설정")
+                    }
                     IconButton(onClick = { viewModel.navigateTo(Screen.HistoryList) }) {
                         Icon(Icons.Default.DateRange, contentDescription = "저장 기록")
                     }
@@ -65,6 +92,7 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                 )
             )
         },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = { showAddDialog = true }) {
                 Icon(Icons.Default.Add, contentDescription = "추가")
@@ -93,14 +121,12 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                 items(items, key = { it.id }) { item ->
                     ShoppingItemRow(
                         item = item,
+                        defaultStore = defaultStore,
                         onToggle = { viewModel.toggleCheck(item) },
                         onEdit = { editTarget = item },
                         onDelete = { viewModel.deleteItem(item) },
-                        onSearchCoupang = {
-                            openUrl(context, SearchUrlHelper.coupang(item.name))
-                        },
-                        onSearchSSG = {
-                            openUrl(context, SearchUrlHelper.ssg(item.name))
+                        onSearch = { store ->
+                            openUrl(context, SearchUrlHelper.buildUrl(store, item.name))
                         }
                     )
                 }

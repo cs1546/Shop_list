@@ -2,7 +2,6 @@ package com.joon.shoplist.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,7 +9,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -22,24 +24,28 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextDecoration
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.joon.shoplist.data.ShoppingItem
+import com.joon.shoplist.util.Store
 
 @Composable
 fun ShoppingItemRow(
     item: ShoppingItem,
+    defaultStore: Store,
     onToggle: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onSearchCoupang: () -> Unit,
-    onSearchSSG: () -> Unit
+    onSearch: (Store) -> Unit
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
+    var menuExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(dismissState.currentValue) {
         if(dismissState.currentValue != SwipeToDismissBoxValue.Settled)
@@ -90,20 +96,39 @@ fun ShoppingItemRow(
                         MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     else
                         MaterialTheme.colorScheme.onSurface
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                )
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                TextButton(onClick = onSearchCoupang) {
-                    Text("쿠팡", style = MaterialTheme.typography.labelSmall)
+            TextButton(onClick = { onSearch(defaultStore) }) {
+                Text(defaultStore.label, style = MaterialTheme.typography.labelSmall)
+            }
+
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "메뉴")
                 }
-                TextButton(onClick = onSearchSSG) {
-                    Text("SSG", style = MaterialTheme.typography.labelSmall)
-                }
-                IconButton(onClick = onEdit) {
-                    Text("...", style = MaterialTheme.typography.labelSmall)
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    Store.entries
+                        .filter { it != defaultStore }
+                        .forEach { store ->
+                            DropdownMenuItem(
+                                text = { Text(store.label) },
+                                onClick = {
+                                    menuExpanded = false
+                                    onSearch(store)
+                                }
+                            )
+                        }
+                    DropdownMenuItem(
+                        text = { Text("수정") },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit()
+                        }
+                    )
                 }
             }
         }
