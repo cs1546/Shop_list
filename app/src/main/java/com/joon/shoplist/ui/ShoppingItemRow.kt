@@ -2,11 +2,15 @@ package com.joon.shoplist.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -29,11 +33,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.joon.shoplist.data.ShoppingItem
 import com.joon.shoplist.util.Store
+import java.io.File
 
 @Composable
 fun ShoppingItemRow(
@@ -42,10 +50,14 @@ fun ShoppingItemRow(
     onToggle: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
-    onSearch: (Store) -> Unit
+    onSearch: (Store) -> Unit,
+    onAttachImage: () -> Unit,
+    onRemoveImage: () -> Unit,
+    onViewImage: () -> Unit
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
     var menuExpanded by remember { mutableStateOf(false) }
+    val hasImage = item.imagePath.isNotEmpty() && File(item.imagePath).exists()
 
     LaunchedEffect(dismissState.currentValue) {
         if(dismissState.currentValue != SwipeToDismissBoxValue.Settled)
@@ -85,19 +97,35 @@ fun ShoppingItemRow(
         ) {
             Checkbox(checked = item.isChecked, onCheckedChange = { onToggle() })
 
-            Text(
-                text = item.name,
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 4.dp),
-                style = MaterialTheme.typography.bodyLarge.copy(
-                    textDecoration = if(item.isChecked) TextDecoration.LineThrough else TextDecoration.None,
-                    color = if(item.isChecked)
-                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                    else
-                        MaterialTheme.colorScheme.onSurface
+                    .padding(start = 4.dp)
+            ) {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        textDecoration = if(item.isChecked) TextDecoration.LineThrough else TextDecoration.None,
+                        color = if(item.isChecked)
+                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        else
+                            MaterialTheme.colorScheme.onSurface
+                    )
                 )
-            )
+
+                if(hasImage) {
+                    AsyncImage(
+                        model = File(item.imagePath),
+                        contentDescription = "첨부 이미지",
+                        modifier = Modifier
+                            .padding(top = 4.dp)
+                            .size(80.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onViewImage() },
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
 
             TextButton(onClick = { onSearch(defaultStore) }) {
                 Text(defaultStore.label, style = MaterialTheme.typography.labelSmall)
@@ -122,6 +150,22 @@ fun ShoppingItemRow(
                                 }
                             )
                         }
+                    DropdownMenuItem(
+                        text = { Text(if(hasImage) "사진 변경" else "사진 첨부") },
+                        onClick = {
+                            menuExpanded = false
+                            onAttachImage()
+                        }
+                    )
+                    if(hasImage) {
+                        DropdownMenuItem(
+                            text = { Text("사진 삭제") },
+                            onClick = {
+                                menuExpanded = false
+                                onRemoveImage()
+                            }
+                        )
+                    }
                     DropdownMenuItem(
                         text = { Text("수정") },
                         onClick = {

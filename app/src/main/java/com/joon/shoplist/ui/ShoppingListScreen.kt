@@ -3,6 +3,8 @@ package com.joon.shoplist.ui
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -13,6 +15,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -37,8 +40,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import com.joon.shoplist.data.ShoppingItem
 import com.joon.shoplist.util.SearchUrlHelper
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,6 +56,19 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
     var showAddDialog by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
     var editTarget by remember { mutableStateOf<ShoppingItem?>(null) }
+    var imagePickTarget by remember { mutableStateOf<ShoppingItem?>(null) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        val target = imagePickTarget ?: return@rememberLauncherForActivityResult
+        imagePickTarget = null
+        if(uri == null) return@rememberLauncherForActivityResult
+
+        val savedPath = copyImageToInternal(context, uri, target.id)
+        if(savedPath != null)
+            viewModel.setImagePath(target, savedPath)
+    }
 
     LaunchedEffect(Unit) {
         viewModel.undoEvent.collect { event ->
@@ -73,6 +91,12 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
             TopAppBar(
                 title = { Text("쇼핑 체크리스트") },
                 actions = {
+                    IconButton(
+                        onClick = { shareList(context, items) },
+                        enabled = items.isNotEmpty()
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "공유")
+                    }
                     IconButton(onClick = { viewModel.navigateTo(Screen.Settings) }) {
                         Icon(Icons.Default.Settings, contentDescription = "설정")
                     }
@@ -127,7 +151,13 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                         onDelete = { viewModel.deleteItem(item) },
                         onSearch = { store ->
                             openUrl(context, SearchUrlHelper.buildUrl(store, item.name))
-                        }
+                        },
+                        onAttachImage = {
+                            imagePickTarget = item
+                            imagePickerLauncher.launch("image/*")
+                        },
+                        onRemoveImage = { viewModel.removeImage(item) },
+                        onViewImage = { viewImage(context, item.imagePath) }
                     )
                 }
             }
@@ -168,6 +198,78 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                 editTarget = null
             }
         )
+    }
+}
+
+private fun copyImageToInternal(context: Context, uri: Uri, itemId: Long): String? {
+    return try {
+        val imagesDir = File(context.filesDir, "images")
+        if(!imagesDir.exists()) imagesDir.mkdirs()
+        val destFile = File(imagesDir, "${itemId}_${System.currentTimeMillis()}.jpg")
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            destFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+        destFile.absolutePath
+    } catch(e: Exception) {
+        null
+    }
+}
+
+private fun viewImage(context: Context, imagePath: String) {
+    val file = File(imagePath)
+    if(!file.exists()) return
+    val uri = FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        file
+    )
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "image/*")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(intent)
+}
+
+private fun shareList(context: Context, items: List<ShoppingItem>) {
+    val text = buildString {
+        appendLine("쇼핑 체크리스트")
+        appendLine("─".repeat(20))
+        items.forEach { item ->
+            val check = if(item.isChecked) "v" else " "
+            appendLine("[$check] ${item.name}")
+        }
+    }
+
+    val imageFiles = items
+        .filter { it.imagePath.isNotEmpty() && File(it.imagePath).exists() }
+        .map { File(it.imagePath) }
+
+    if(imageFiles.isEmpty()) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, text)
+        }
+        context.startActivity(Intent.createChooser(intent, "리스트 공유"))
+    } else {
+        val uris = ArrayList<Uri>()
+        imageFiles.forEach { file ->
+            uris.add(
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+            )
+        }
+        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+            type = "image/*"
+            putExtra(Intent.EXTRA_TEXT, text)
+            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(intent, "리스트 공유"))
     }
 }
 

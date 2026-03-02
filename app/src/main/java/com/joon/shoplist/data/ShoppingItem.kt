@@ -15,5 +15,8 @@ data class ShoppingItem(
     val isChecked: Boolean = false,
 
     @ColumnInfo(name = "created_at")
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "image_path", defaultValue = "")
+    val imagePath: String = ""
 )

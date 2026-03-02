@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -94,6 +95,19 @@ class ShoppingViewModel(
                 is UndoEvent.Single -> repository.restore(event.item)
                 is UndoEvent.ClearAll -> repository.restoreAll(event.items)
             }
+        }
+    }
+
+    fun setImagePath(item: ShoppingItem, path: String) {
+        viewModelScope.launch { repository.setImagePath(item, path) }
+    }
+
+    fun removeImage(item: ShoppingItem) {
+        viewModelScope.launch {
+            if(item.imagePath.isNotEmpty()) {
+                File(item.imagePath).delete()
+            }
+            repository.setImagePath(item, "")
         }
     }
 

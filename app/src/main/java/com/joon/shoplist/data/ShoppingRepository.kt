@@ -21,6 +21,10 @@ class ShoppingRepository(
         dao.update(item.copy(name = newName))
     }
 
+    suspend fun setImagePath(item: ShoppingItem, path: String) {
+        dao.update(item.copy(imagePath = path))
+    }
+
     suspend fun delete(item: ShoppingItem) {
         dao.delete(item)
     }
