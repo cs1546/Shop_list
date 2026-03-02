@@ -153,6 +153,15 @@ class ShoppingViewModel(
         }
     }
 
+    fun importItems(names: List<String>) {
+        viewModelScope.launch {
+            names.forEach { name ->
+                if(name.isNotBlank())
+                    repository.add(name.trim())
+            }
+        }
+    }
+
     fun deleteSavedList(listId: Long) {
         viewModelScope.launch { repository.deleteSavedList(listId) }
     }

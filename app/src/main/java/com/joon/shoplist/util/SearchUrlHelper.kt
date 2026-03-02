@@ -7,7 +7,8 @@ enum class Store(val label: String) {
     SSG("SSG"),
     COSTCO("코스트코"),
     NAVER("네이버"),
-    TRADERS("트레이더스");
+    TRADERS("트레이더스"),
+    DAISO("다이소");
 }
 
 object SearchUrlHelper {
@@ -20,6 +21,7 @@ object SearchUrlHelper {
             Store.COSTCO -> "https://www.costco.co.kr/search?text=$encoded"
             Store.NAVER -> "https://search.shopping.naver.com/search/all?query=$encoded"
             Store.TRADERS -> "https://traders.ssg.com/search.ssg?query=$encoded"
+            Store.DAISO -> "https://www.daisomall.co.kr/ds/search?keyword=$encoded"
         }
     }
 }
