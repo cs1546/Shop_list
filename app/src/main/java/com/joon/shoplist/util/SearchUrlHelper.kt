@@ -21,7 +21,7 @@ object SearchUrlHelper {
             Store.COSTCO -> "https://www.costco.co.kr/search?text=$encoded"
             Store.NAVER -> "https://search.shopping.naver.com/search/all?query=$encoded"
             Store.TRADERS -> "https://traders.ssg.com/search.ssg?query=$encoded"
-            Store.DAISO -> "https://www.daisomall.co.kr/ds/search?keyword=$encoded"
+            Store.DAISO -> "https://prdm.daisomall.co.kr/ms/msb/SCR_MSB_0011?selectPdList=$encoded"
         }
     }
 }
