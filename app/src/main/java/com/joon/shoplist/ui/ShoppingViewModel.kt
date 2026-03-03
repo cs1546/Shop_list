@@ -162,6 +162,15 @@ class ShoppingViewModel(
         }
     }
 
+    fun importFullItems(items: List<Triple<String, Boolean, String>>) {
+        viewModelScope.launch {
+            items.forEach { (name, checked, imagePath) ->
+                if(name.isNotBlank())
+                    repository.importItem(name.trim(), checked, imagePath)
+            }
+        }
+    }
+
     fun deleteSavedList(listId: Long) {
         viewModelScope.launch { repository.deleteSavedList(listId) }
     }

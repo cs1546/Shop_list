@@ -43,7 +43,11 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.joon.shoplist.data.ShoppingItem
 import com.joon.shoplist.util.SearchUrlHelper
+import org.json.JSONArray
+import org.json.JSONObject
 import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -233,18 +237,40 @@ private fun viewImage(context: Context, imagePath: String) {
 }
 
 private fun shareList(context: Context, items: List<ShoppingItem>) {
-    val text = buildString {
-        appendLine("쇼핑 체크리스트")
-        appendLine("─".repeat(20))
-        items.forEach { item ->
-            val check = if(item.isChecked) "v" else " "
-            appendLine("[$check] ${item.name}")
+    val shareDir = File(context.cacheDir, "share")
+    shareDir.mkdirs()
+    val zipFile = File(shareDir, "쇼핑목록.zip")
+
+    ZipOutputStream(zipFile.outputStream()).use { zip ->
+        val jsonItems = JSONArray()
+        items.forEachIndexed { index, item ->
+            val obj = JSONObject()
+            obj.put("name", item.name)
+            obj.put("checked", item.isChecked)
+            val imgName = if(item.imagePath.isNotEmpty() && File(item.imagePath).exists())
+                "img_$index.jpg" else ""
+            obj.put("image", imgName)
+            jsonItems.put(obj)
+        }
+
+        zip.putNextEntry(ZipEntry("list.json"))
+        zip.write(JSONObject().put("items", jsonItems).toString().toByteArray())
+        zip.closeEntry()
+
+        items.forEachIndexed { index, item ->
+            if(item.imagePath.isNotEmpty() && File(item.imagePath).exists()) {
+                zip.putNextEntry(ZipEntry("img_$index.jpg"))
+                File(item.imagePath).inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+            }
         }
     }
 
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", zipFile)
     val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "text/plain"
-        putExtra(Intent.EXTRA_TEXT, text)
+        type = "application/zip"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(Intent.createChooser(intent, "리스트 공유"))
 }

@@ -13,6 +13,10 @@ class ShoppingRepository(
         dao.insert(ShoppingItem(name = name))
     }
 
+    suspend fun importItem(name: String, isChecked: Boolean, imagePath: String) {
+        dao.insert(ShoppingItem(name = name, isChecked = isChecked, imagePath = imagePath))
+    }
+
     suspend fun toggleCheck(item: ShoppingItem) {
         dao.update(item.copy(isChecked = !item.isChecked))
     }
