@@ -242,35 +242,11 @@ private fun shareList(context: Context, items: List<ShoppingItem>) {
         }
     }
 
-    val imageFiles = items
-        .filter { it.imagePath.isNotEmpty() && File(it.imagePath).exists() }
-        .map { File(it.imagePath) }
-
-    if(imageFiles.isEmpty()) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, text)
-        }
-        context.startActivity(Intent.createChooser(intent, "리스트 공유"))
-    } else {
-        val uris = ArrayList<Uri>()
-        imageFiles.forEach { file ->
-            uris.add(
-                FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file
-                )
-            )
-        }
-        val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-            type = "image/*"
-            putExtra(Intent.EXTRA_TEXT, text)
-            putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(intent, "리스트 공유"))
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, text)
     }
+    context.startActivity(Intent.createChooser(intent, "리스트 공유"))
 }
 
 private fun openUrl(context: Context, url: String) {
