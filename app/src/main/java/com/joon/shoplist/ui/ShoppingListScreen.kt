@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,17 +44,14 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.joon.shoplist.data.ShoppingItem
 import com.joon.shoplist.util.SearchUrlHelper
-import org.json.JSONArray
-import org.json.JSONObject
 import java.io.File
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShoppingListScreen(viewModel: ShoppingViewModel) {
     val items by viewModel.items.collectAsState()
     val defaultStore by viewModel.defaultStore.collectAsState()
+    val sharedFolderUri by viewModel.sharedFolderUri.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -90,13 +88,29 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
         }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.snackMessage.collect { message ->
+            snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Short)
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("쇼핑 체크리스트") },
                 actions = {
+                    if(sharedFolderUri != null) {
+                        IconButton(onClick = { viewModel.importFromSharedFolder() }) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = "가져오기")
+                        }
+                    }
                     IconButton(
-                        onClick = { shareList(context, items) },
+                        onClick = {
+                            if(sharedFolderUri != null)
+                                viewModel.exportToSharedFolder()
+                            else
+                                shareListAsZip(context, items)
+                        },
                         enabled = items.isNotEmpty()
                     ) {
                         Icon(Icons.Default.Share, contentDescription = "공유")
@@ -236,15 +250,15 @@ private fun viewImage(context: Context, imagePath: String) {
     context.startActivity(intent)
 }
 
-private fun shareList(context: Context, items: List<ShoppingItem>) {
+private fun shareListAsZip(context: Context, items: List<ShoppingItem>) {
     val shareDir = File(context.cacheDir, "share")
     shareDir.mkdirs()
     val zipFile = File(shareDir, "쇼핑목록.zip")
 
-    ZipOutputStream(zipFile.outputStream()).use { zip ->
-        val jsonItems = JSONArray()
+    java.util.zip.ZipOutputStream(zipFile.outputStream()).use { zip ->
+        val jsonItems = org.json.JSONArray()
         items.forEachIndexed { index, item ->
-            val obj = JSONObject()
+            val obj = org.json.JSONObject()
             obj.put("name", item.name)
             obj.put("checked", item.isChecked)
             val imgName = if(item.imagePath.isNotEmpty() && File(item.imagePath).exists())
@@ -253,13 +267,13 @@ private fun shareList(context: Context, items: List<ShoppingItem>) {
             jsonItems.put(obj)
         }
 
-        zip.putNextEntry(ZipEntry("list.json"))
-        zip.write(JSONObject().put("items", jsonItems).toString().toByteArray())
+        zip.putNextEntry(java.util.zip.ZipEntry("list.json"))
+        zip.write(org.json.JSONObject().put("items", jsonItems).toString().toByteArray())
         zip.closeEntry()
 
         items.forEachIndexed { index, item ->
             if(item.imagePath.isNotEmpty() && File(item.imagePath).exists()) {
-                zip.putNextEntry(ZipEntry("img_$index.jpg"))
+                zip.putNextEntry(java.util.zip.ZipEntry("img_$index.jpg"))
                 File(item.imagePath).inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
             }

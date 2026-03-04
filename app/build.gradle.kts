@@ -74,4 +74,5 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.coil.compose)
+    implementation(libs.documentfile)
 }

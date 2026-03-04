@@ -19,9 +19,6 @@ import com.joon.shoplist.ui.SettingsScreen
 import com.joon.shoplist.ui.ShoppingListScreen
 import com.joon.shoplist.ui.ShoppingViewModel
 import com.joon.shoplist.ui.theme.ShopListTheme
-import org.json.JSONObject
-import java.io.File
-import java.util.zip.ZipInputStream
 
 class MainActivity : ComponentActivity() {
 
@@ -76,51 +73,10 @@ class MainActivity : ComponentActivity() {
             "application/zip", "application/octet-stream", "application/x-zip-compressed" -> {
                 @Suppress("DEPRECATION")
                 val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM) ?: return
-                importFromZip(uri)
-            }
-        }
-    }
-
-    private fun importFromZip(uri: Uri) {
-        try {
-            val imagesDir = File(filesDir, "images")
-            imagesDir.mkdirs()
-
-            val imageMap = mutableMapOf<String, String>()
-            var jsonContent = ""
-
-            contentResolver.openInputStream(uri)?.use { input ->
-                ZipInputStream(input).use { zip ->
-                    var entry = zip.nextEntry
-                    while(entry != null) {
-                        if(entry.name == "list.json") {
-                            jsonContent = zip.bufferedReader().readText()
-                        } else if(entry.name.startsWith("img_")) {
-                            val destFile = File(imagesDir, "${System.currentTimeMillis()}_${entry.name}")
-                            destFile.outputStream().use { out -> zip.copyTo(out) }
-                            imageMap[entry.name] = destFile.absolutePath
-                        }
-                        zip.closeEntry()
-                        entry = zip.nextEntry
-                    }
+                contentResolver.openInputStream(uri)?.use { input ->
+                    viewModel.importFromZipStream(input)
                 }
             }
-
-            if(jsonContent.isNotEmpty()) {
-                val items = JSONObject(jsonContent).getJSONArray("items")
-                val importList = mutableListOf<Triple<String, Boolean, String>>()
-                for(i in 0 until items.length()) {
-                    val obj = items.getJSONObject(i)
-                    val name = obj.getString("name")
-                    val checked = obj.getBoolean("checked")
-                    val imgFile = obj.optString("image", "")
-                    val localPath = if(imgFile.isNotEmpty()) imageMap[imgFile] ?: "" else ""
-                    importList.add(Triple(name, checked, localPath))
-                }
-                viewModel.importFullItems(importList)
-            }
-        } catch(e: Exception) {
-            e.printStackTrace()
         }
     }
 
