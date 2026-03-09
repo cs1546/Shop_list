@@ -2,7 +2,6 @@ package com.joon.shoplist.ui
 
 import android.content.Context
 import android.net.Uri
-import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -70,8 +69,17 @@ class ShoppingViewModel(
     private val _defaultStore = MutableStateFlow(loadDefaultStore())
     val defaultStore: StateFlow<Store> = _defaultStore.asStateFlow()
 
-    private val _sharedFolderUri = MutableStateFlow(prefs.getString("shared_folder_uri", null))
-    val sharedFolderUri: StateFlow<String?> = _sharedFolderUri.asStateFlow()
+    private val _exportFileUri = MutableStateFlow(prefs.getString("export_file_uri", null))
+    val exportFileUri: StateFlow<String?> = _exportFileUri.asStateFlow()
+
+    private val _importFileUri = MutableStateFlow(prefs.getString("import_file_uri", null))
+    val importFileUri: StateFlow<String?> = _importFileUri.asStateFlow()
+
+    private val _requestExportPicker = MutableSharedFlow<Unit>()
+    val requestExportPicker = _requestExportPicker.asSharedFlow()
+
+    private val _requestImportPicker = MutableSharedFlow<Unit>()
+    val requestImportPicker = _requestImportPicker.asSharedFlow()
 
     private fun loadDefaultStore(): Store {
         val name = prefs.getString("default_store", Store.COUPANG.name) ?: Store.COUPANG.name
@@ -83,9 +91,14 @@ class ShoppingViewModel(
         _defaultStore.value = store
     }
 
-    fun setSharedFolderUri(uri: String?) {
-        prefs.edit().putString("shared_folder_uri", uri).apply()
-        _sharedFolderUri.value = uri
+    fun setExportFileUri(uri: String?) {
+        prefs.edit().putString("export_file_uri", uri).apply()
+        _exportFileUri.value = uri
+    }
+
+    fun setImportFileUri(uri: String?) {
+        prefs.edit().putString("import_file_uri", uri).apply()
+        _importFileUri.value = uri
     }
 
     fun addItem(name: String) {
@@ -132,65 +145,64 @@ class ShoppingViewModel(
 
     fun exportToSharedFolder() {
         viewModelScope.launch {
-            val folderUriStr = _sharedFolderUri.value
-            if(folderUriStr == null) {
-                _snackMessage.emit("공유 폴더를 먼저 설정하세요")
+            val uriStr = _exportFileUri.value
+            if(uriStr == null) {
+                _requestExportPicker.emit(Unit)
                 return@launch
             }
-            withContext(Dispatchers.IO) {
-                try {
-                    val folder = DocumentFile.fromTreeUri(appContext, Uri.parse(folderUriStr))
-                        ?: throw Exception("폴더 접근 실패")
+            writeExportData(Uri.parse(uriStr))
+        }
+    }
 
-                    val zipBytes = createZipBytes(items.value)
+    fun onExportFileSelected(uri: Uri) {
+        setExportFileUri(uri.toString())
+        viewModelScope.launch { writeExportData(uri) }
+    }
 
-                    folder.listFiles()
-                        .filter { it.name?.endsWith(".zip") == true }
-                        .forEach { it.delete() }
-
-                    val newFile = folder.createFile("application/zip", "쇼핑목록")
-                        ?: throw Exception("파일 생성 실패")
-
-                    appContext.contentResolver.openOutputStream(newFile.uri)?.use { out ->
-                        out.write(zipBytes)
-                    }
-                    _snackMessage.emit("공유 완료")
-                } catch(e: Exception) {
-                    _snackMessage.emit("공유 실패: ${e.message}")
+    private suspend fun writeExportData(uri: Uri) {
+        withContext(Dispatchers.IO) {
+            try {
+                val zipBytes = createZipBytes(items.value)
+                appContext.contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                    out.write(zipBytes)
                 }
+                _snackMessage.emit("보내기 완료")
+            } catch(e: Exception) {
+                setExportFileUri(null)
+                _snackMessage.emit("보내기 실패: ${e.message}")
             }
         }
     }
 
     fun importFromSharedFolder() {
         viewModelScope.launch {
-            val folderUriStr = _sharedFolderUri.value
-            if(folderUriStr == null) {
-                _snackMessage.emit("공유 폴더를 먼저 설정하세요")
+            val uriStr = _importFileUri.value
+            if(uriStr == null) {
+                _requestImportPicker.emit(Unit)
                 return@launch
             }
-            withContext(Dispatchers.IO) {
-                try {
-                    val folder = DocumentFile.fromTreeUri(appContext, Uri.parse(folderUriStr))
-                        ?: throw Exception("폴더 접근 실패")
+            readImportData(Uri.parse(uriStr))
+        }
+    }
 
-                    val zipDoc = folder.listFiles()
-                        .filter { it.name?.endsWith(".zip") == true }
-                        .maxByOrNull { it.lastModified() }
+    fun onImportFileSelected(uri: Uri) {
+        setImportFileUri(uri.toString())
+        viewModelScope.launch { readImportData(uri) }
+    }
 
-                    if(zipDoc == null) {
-                        _snackMessage.emit("공유된 리스트가 없습니다")
-                        return@withContext
-                    }
-
-                    val count = appContext.contentResolver.openInputStream(zipDoc.uri)?.use { input ->
-                        importFromZipStream(input)
-                    } ?: 0
-
+    private suspend fun readImportData(uri: Uri) {
+        withContext(Dispatchers.IO) {
+            try {
+                val count = appContext.contentResolver.openInputStream(uri)?.use { input ->
+                    importFromZipStream(input)
+                } ?: 0
+                if(0 < count)
                     _snackMessage.emit("${count}개 항목 추가됨")
-                } catch(e: Exception) {
-                    _snackMessage.emit("가져오기 실패: ${e.message}")
-                }
+                else
+                    _snackMessage.emit("공유된 리스트가 없습니다")
+            } catch(e: Exception) {
+                setImportFileUri(null)
+                _snackMessage.emit("받아오기 실패: ${e.message}")
             }
         }
     }
