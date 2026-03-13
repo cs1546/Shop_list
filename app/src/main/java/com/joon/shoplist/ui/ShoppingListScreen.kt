@@ -14,9 +14,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -71,42 +70,6 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
             viewModel.setImagePath(target, savedPath)
     }
 
-    val exportCreateLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.CreateDocument("application/zip")
-    ) { uri: Uri? ->
-        if(uri != null) {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
-            )
-            viewModel.onExportFileSelected(uri)
-        }
-    }
-
-    val importOpenLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if(uri != null) {
-            context.contentResolver.takePersistableUriPermission(
-                uri,
-                Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-            viewModel.onImportFileSelected(uri)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.requestExportPicker.collect {
-            exportCreateLauncher.launch("쇼핑목록.zip")
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.requestImportPicker.collect {
-            importOpenLauncher.launch(arrayOf("application/zip", "application/octet-stream"))
-        }
-    }
-
     LaunchedEffect(Unit) {
         viewModel.undoEvent.collect { event ->
             val message = when(event) {
@@ -135,13 +98,10 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                 title = { Text("쇼핑 체크리스트") },
                 actions = {
                     IconButton(
-                        onClick = { viewModel.exportToSharedFolder() },
+                        onClick = { shareListAsZip(context, viewModel, items) },
                         enabled = items.isNotEmpty()
                     ) {
-                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "보내기")
-                    }
-                    IconButton(onClick = { viewModel.importFromSharedFolder() }) {
-                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "받아오기")
+                        Icon(Icons.Default.Share, contentDescription = "공유")
                     }
                     IconButton(onClick = { viewModel.navigateTo(Screen.Settings) }) {
                         Icon(Icons.Default.Settings, contentDescription = "설정")
@@ -276,6 +236,21 @@ private fun viewImage(context: Context, imagePath: String) {
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     context.startActivity(intent)
+}
+
+private fun shareListAsZip(context: Context, viewModel: ShoppingViewModel, items: List<ShoppingItem>) {
+    val shareDir = File(context.cacheDir, "share")
+    shareDir.mkdirs()
+    val zipFile = File(shareDir, "쇼핑목록.zip")
+    zipFile.writeBytes(viewModel.createZipBytes(items))
+
+    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", zipFile)
+    val intent = Intent(Intent.ACTION_SEND).apply {
+        type = "application/zip"
+        putExtra(Intent.EXTRA_STREAM, uri)
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    context.startActivity(Intent.createChooser(intent, "리스트 공유"))
 }
 
 private fun openUrl(context: Context, url: String) {

@@ -1,7 +1,6 @@
 package com.joon.shoplist.ui
 
 import android.content.Context
-import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -10,7 +9,6 @@ import com.joon.shoplist.data.SavedShoppingList
 import com.joon.shoplist.data.ShoppingItem
 import com.joon.shoplist.data.ShoppingRepository
 import com.joon.shoplist.util.Store
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +17,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -69,17 +66,6 @@ class ShoppingViewModel(
     private val _defaultStore = MutableStateFlow(loadDefaultStore())
     val defaultStore: StateFlow<Store> = _defaultStore.asStateFlow()
 
-    private val _exportFileUri = MutableStateFlow(prefs.getString("export_file_uri", null))
-    val exportFileUri: StateFlow<String?> = _exportFileUri.asStateFlow()
-
-    private val _importFileUri = MutableStateFlow(prefs.getString("import_file_uri", null))
-    val importFileUri: StateFlow<String?> = _importFileUri.asStateFlow()
-
-    private val _requestExportPicker = MutableSharedFlow<Unit>()
-    val requestExportPicker = _requestExportPicker.asSharedFlow()
-
-    private val _requestImportPicker = MutableSharedFlow<Unit>()
-    val requestImportPicker = _requestImportPicker.asSharedFlow()
 
     private fun loadDefaultStore(): Store {
         val name = prefs.getString("default_store", Store.COUPANG.name) ?: Store.COUPANG.name
@@ -91,15 +77,6 @@ class ShoppingViewModel(
         _defaultStore.value = store
     }
 
-    fun setExportFileUri(uri: String?) {
-        prefs.edit().putString("export_file_uri", uri).apply()
-        _exportFileUri.value = uri
-    }
-
-    fun setImportFileUri(uri: String?) {
-        prefs.edit().putString("import_file_uri", uri).apply()
-        _importFileUri.value = uri
-    }
 
     fun addItem(name: String) {
         if(name.isBlank()) return
@@ -143,71 +120,7 @@ class ShoppingViewModel(
         }
     }
 
-    fun exportToSharedFolder() {
-        viewModelScope.launch {
-            val uriStr = _exportFileUri.value
-            if(uriStr == null) {
-                _requestExportPicker.emit(Unit)
-                return@launch
-            }
-            writeExportData(Uri.parse(uriStr))
-        }
-    }
-
-    fun onExportFileSelected(uri: Uri) {
-        setExportFileUri(uri.toString())
-        viewModelScope.launch { writeExportData(uri) }
-    }
-
-    private suspend fun writeExportData(uri: Uri) {
-        withContext(Dispatchers.IO) {
-            try {
-                val zipBytes = createZipBytes(items.value)
-                appContext.contentResolver.openOutputStream(uri, "wt")?.use { out ->
-                    out.write(zipBytes)
-                }
-                _snackMessage.emit("보내기 완료")
-            } catch(e: Exception) {
-                setExportFileUri(null)
-                _snackMessage.emit("보내기 실패: ${e.message}")
-            }
-        }
-    }
-
-    fun importFromSharedFolder() {
-        viewModelScope.launch {
-            val uriStr = _importFileUri.value
-            if(uriStr == null) {
-                _requestImportPicker.emit(Unit)
-                return@launch
-            }
-            readImportData(Uri.parse(uriStr))
-        }
-    }
-
-    fun onImportFileSelected(uri: Uri) {
-        setImportFileUri(uri.toString())
-        viewModelScope.launch { readImportData(uri) }
-    }
-
-    private suspend fun readImportData(uri: Uri) {
-        withContext(Dispatchers.IO) {
-            try {
-                val count = appContext.contentResolver.openInputStream(uri)?.use { input ->
-                    importFromZipStream(input)
-                } ?: 0
-                if(0 < count)
-                    _snackMessage.emit("${count}개 항목 추가됨")
-                else
-                    _snackMessage.emit("공유된 리스트가 없습니다")
-            } catch(e: Exception) {
-                setImportFileUri(null)
-                _snackMessage.emit("받아오기 실패: ${e.message}")
-            }
-        }
-    }
-
-    private fun createZipBytes(items: List<ShoppingItem>): ByteArray {
+    fun createZipBytes(items: List<ShoppingItem>): ByteArray {
         val baos = java.io.ByteArrayOutputStream()
         ZipOutputStream(baos).use { zip ->
             val jsonItems = JSONArray()
@@ -235,7 +148,7 @@ class ShoppingViewModel(
         return baos.toByteArray()
     }
 
-    fun importFromZipStream(input: java.io.InputStream): Int {
+    fun importFromZipStream(input: java.io.InputStream) {
         val imagesDir = File(appContext.filesDir, "images")
         imagesDir.mkdirs()
 
@@ -245,9 +158,9 @@ class ShoppingViewModel(
         ZipInputStream(input).use { zip ->
             var entry = zip.nextEntry
             while(entry != null) {
-                if(entry.name == "list.json") {
+                if(entry.name == "list.json")
                     jsonContent = zip.bufferedReader().readText()
-                } else if(entry.name.startsWith("img_")) {
+                else if(entry.name.startsWith("img_")) {
                     val destFile = File(imagesDir, "${System.currentTimeMillis()}_${entry.name}")
                     destFile.outputStream().use { out -> zip.copyTo(out) }
                     imageMap[entry.name] = destFile.absolutePath
@@ -257,28 +170,39 @@ class ShoppingViewModel(
             }
         }
 
-        if(jsonContent.isEmpty()) return 0
+        if(jsonContent.isEmpty()) return
 
-        val items = JSONObject(jsonContent).getJSONArray("items")
-        var count = 0
-        val importList = mutableListOf<Triple<String, Boolean, String>>()
-        for(i in 0 until items.length()) {
-            val obj = items.getJSONObject(i)
-            val name = obj.getString("name")
-            val checked = obj.getBoolean("checked")
-            val imgFile = obj.optString("image", "")
-            val localPath = if(imgFile.isNotEmpty()) imageMap[imgFile] ?: "" else ""
-            importList.add(Triple(name, checked, localPath))
-            count++
-        }
+        val jsonItems = JSONObject(jsonContent).getJSONArray("items")
+        var added = 0
+        var skipped = 0
 
         kotlinx.coroutines.runBlocking {
-            importList.forEach { (name, checked, imagePath) ->
-                if(name.isNotBlank())
-                    repository.importItem(name.trim(), checked, imagePath)
+            for(i in 0 until jsonItems.length()) {
+                val obj = jsonItems.getJSONObject(i)
+                val name = obj.getString("name")
+                val checked = obj.getBoolean("checked")
+                val imgFile = obj.optString("image", "")
+                val localPath = if(imgFile.isNotEmpty()) imageMap[imgFile] ?: "" else ""
+                if(name.isNotBlank()) {
+                    if(repository.importItem(name.trim(), checked, localPath))
+                        added++
+                    else
+                        skipped++
+                }
             }
         }
-        return count
+
+        viewModelScope.launch {
+            val msg = buildString {
+                if(0 < added) append("${added}개 추가")
+                if(0 < skipped) {
+                    if(isNotEmpty()) append(", ")
+                    append("${skipped}개 중복 제외")
+                }
+            }
+            if(msg.isNotEmpty())
+                _snackMessage.emit(msg)
+        }
     }
 
     fun clearAll() {
@@ -325,19 +249,21 @@ class ShoppingViewModel(
 
     fun importItems(names: List<String>) {
         viewModelScope.launch {
+            var added = 0
             names.forEach { name ->
-                if(name.isNotBlank())
-                    repository.add(name.trim())
+                if(name.isNotBlank() && repository.addIfNotExists(name.trim()))
+                    added++
             }
-        }
-    }
-
-    fun importFullItems(items: List<Triple<String, Boolean, String>>) {
-        viewModelScope.launch {
-            items.forEach { (name, checked, imagePath) ->
-                if(name.isNotBlank())
-                    repository.importItem(name.trim(), checked, imagePath)
+            val skipped = names.count { it.isNotBlank() } - added
+            val msg = buildString {
+                if(0 < added) append("${added}개 추가")
+                if(0 < skipped) {
+                    if(isNotEmpty()) append(", ")
+                    append("${skipped}개 중복 제외")
+                }
             }
+            if(msg.isNotEmpty())
+                _snackMessage.emit(msg)
         }
     }
 

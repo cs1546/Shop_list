@@ -13,8 +13,25 @@ class ShoppingRepository(
         dao.insert(ShoppingItem(name = name))
     }
 
-    suspend fun importItem(name: String, isChecked: Boolean, imagePath: String) {
+    suspend fun importItem(name: String, isChecked: Boolean, imagePath: String): Boolean {
+        val existing = dao.findByName(name)
+        if(existing != null) {
+            val existingHasImage = existing.imagePath.isNotEmpty()
+            val newHasImage = imagePath.isNotEmpty()
+            if(!newHasImage || (existingHasImage && newHasImage))
+                return false
+            dao.update(existing.copy(imagePath = imagePath))
+            return true
+        }
         dao.insert(ShoppingItem(name = name, isChecked = isChecked, imagePath = imagePath))
+        return true
+    }
+
+    suspend fun addIfNotExists(name: String): Boolean {
+        if(dao.findByName(name) != null)
+            return false
+        dao.insert(ShoppingItem(name = name))
+        return true
     }
 
     suspend fun toggleCheck(item: ShoppingItem) {
