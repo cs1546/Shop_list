@@ -1,7 +1,6 @@
 package com.joon.shoplist
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -62,22 +61,12 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIncomingIntent(intent: Intent?) {
         if(intent?.action != Intent.ACTION_SEND) return
+        if(intent.type != "text/plain") return
 
-        when(intent.type) {
-            "text/plain" -> {
-                val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
-                val names = parseSharedText(text)
-                if(names.isNotEmpty())
-                    viewModel.importItems(names)
-            }
-            "application/zip", "application/octet-stream", "application/x-zip-compressed" -> {
-                @Suppress("DEPRECATION")
-                val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM) ?: return
-                contentResolver.openInputStream(uri)?.use { input ->
-                    viewModel.importFromZipStream(input)
-                }
-            }
-        }
+        val text = intent.getStringExtra(Intent.EXTRA_TEXT) ?: return
+        val names = parseSharedText(text)
+        if(names.isNotEmpty())
+            viewModel.importItems(names)
     }
 
     private fun parseSharedText(text: String): List<String> {

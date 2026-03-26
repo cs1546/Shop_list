@@ -1,5 +1,6 @@
 package com.joon.shoplist.ui
 
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -14,8 +15,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -47,7 +48,8 @@ import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ShoppingListScreen(viewModel: ShoppingViewModel) {
+fun ShoppingListScreen(viewModel: ShoppingViewModel)
+{
     val items by viewModel.items.collectAsState()
     val defaultStore by viewModel.defaultStore.collectAsState()
     val context = LocalContext.current
@@ -72,7 +74,8 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.undoEvent.collect { event ->
-            val message = when(event) {
+            val message = when(event)
+            {
                 is UndoEvent.Single -> "'${event.item.name}' 삭제됨"
                 is UndoEvent.ClearAll -> "${event.items.size}개 항목 삭제됨"
             }
@@ -98,10 +101,10 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                 title = { Text("쇼핑 체크리스트") },
                 actions = {
                     IconButton(
-                        onClick = { shareListAsZip(context, viewModel, items) },
+                        onClick = { viewModel.sendToFirebase() },
                         enabled = items.isNotEmpty()
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = "공유")
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "보내기")
                     }
                     IconButton(onClick = { viewModel.navigateTo(Screen.Settings) }) {
                         Icon(Icons.Default.Settings, contentDescription = "설정")
@@ -129,7 +132,8 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
             }
         }
     ) { padding ->
-        if(items.isEmpty()) {
+        if(items.isEmpty())
+        {
             Box(
                 Modifier
                     .fillMaxSize()
@@ -142,7 +146,9 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-        } else {
+        }
+        else
+        {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
@@ -163,14 +169,20 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
                             imagePickerLauncher.launch("image/*")
                         },
                         onRemoveImage = { viewModel.removeImage(item) },
-                        onViewImage = { viewImage(context, item.imagePath) }
+                        onViewImage = { viewImage(context, item.imagePath) },
+                        onPasteImage = {
+                            val path = pasteImageFromClipboard(context, item.id)
+                            if(path != null)
+                                viewModel.setImagePath(item, path)
+                        }
                     )
                 }
             }
         }
     }
 
-    if(showAddDialog) {
+    if(showAddDialog)
+    {
         AddItemDialog(
             onDismiss = { showAddDialog = false },
             onConfirm = { name ->
@@ -180,7 +192,8 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
         )
     }
 
-    if(showClearDialog) {
+    if(showClearDialog)
+    {
         ClearDialog(
             onSaveAndClear = {
                 showClearDialog = false
@@ -207,8 +220,10 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel) {
     }
 }
 
-private fun copyImageToInternal(context: Context, uri: Uri, itemId: Long): String? {
-    return try {
+private fun copyImageToInternal(context: Context, uri: Uri, itemId: Long): String?
+{
+    return try
+    {
         val imagesDir = File(context.filesDir, "images")
         if(!imagesDir.exists()) imagesDir.mkdirs()
         val destFile = File(imagesDir, "${itemId}_${System.currentTimeMillis()}.jpg")
@@ -218,12 +233,23 @@ private fun copyImageToInternal(context: Context, uri: Uri, itemId: Long): Strin
             }
         }
         destFile.absolutePath
-    } catch(e: Exception) {
-        null
     }
+    catch(e: Exception) { null }
 }
 
-private fun viewImage(context: Context, imagePath: String) {
+private fun pasteImageFromClipboard(context: Context, itemId: Long): String?
+{
+    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+    val clip = clipboard.primaryClip ?: return null
+    if(clip.itemCount < 1) return null
+
+    val item = clip.getItemAt(0)
+    val uri = item.uri ?: return null
+    return copyImageToInternal(context, uri, itemId)
+}
+
+private fun viewImage(context: Context, imagePath: String)
+{
     val file = File(imagePath)
     if(!file.exists()) return
     val uri = FileProvider.getUriForFile(
@@ -238,21 +264,7 @@ private fun viewImage(context: Context, imagePath: String) {
     context.startActivity(intent)
 }
 
-private fun shareListAsZip(context: Context, viewModel: ShoppingViewModel, items: List<ShoppingItem>) {
-    val shareDir = File(context.cacheDir, "share")
-    shareDir.mkdirs()
-    val zipFile = File(shareDir, "쇼핑목록.zip")
-    zipFile.writeBytes(viewModel.createZipBytes(items))
-
-    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", zipFile)
-    val intent = Intent(Intent.ACTION_SEND).apply {
-        type = "application/zip"
-        putExtra(Intent.EXTRA_STREAM, uri)
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-    context.startActivity(Intent.createChooser(intent, "리스트 공유"))
-}
-
-private fun openUrl(context: Context, url: String) {
+private fun openUrl(context: Context, url: String)
+{
     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 }

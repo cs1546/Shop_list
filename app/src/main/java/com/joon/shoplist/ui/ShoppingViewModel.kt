@@ -1,9 +1,18 @@
 package com.joon.shoplist.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.DatabaseReference
+import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.ServerValue
+import com.google.firebase.database.ValueEventListener
 import com.joon.shoplist.data.SavedShoppingItem
 import com.joon.shoplist.data.SavedShoppingList
 import com.joon.shoplist.data.ShoppingItem
@@ -17,23 +26,21 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 
-sealed class Screen {
+sealed class Screen
+{
     data object ShoppingList : Screen()
     data object HistoryList : Screen()
     data class HistoryDetail(val listId: Long, val date: String) : Screen()
     data object Settings : Screen()
 }
 
-sealed class UndoEvent {
+sealed class UndoEvent
+{
     data class Single(val item: ShoppingItem) : UndoEvent()
     data class ClearAll(val items: List<ShoppingItem>) : UndoEvent()
 }
@@ -41,8 +48,8 @@ sealed class UndoEvent {
 class ShoppingViewModel(
     private val repository: ShoppingRepository,
     private val appContext: Context
-) : ViewModel() {
-
+) : ViewModel()
+{
     private val prefs = appContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     val items: StateFlow<List<ShoppingItem>> = repository.allItems
@@ -66,53 +73,89 @@ class ShoppingViewModel(
     private val _defaultStore = MutableStateFlow(loadDefaultStore())
     val defaultStore: StateFlow<Store> = _defaultStore.asStateFlow()
 
+    private val _roomCode = MutableStateFlow(prefs.getString("room_code", null))
+    val roomCode: StateFlow<String?> = _roomCode.asStateFlow()
 
-    private fun loadDefaultStore(): Store {
+    private val deviceId: String = prefs.getString("device_id", null) ?: run {
+        val id = java.util.UUID.randomUUID().toString().take(8)
+        prefs.edit().putString("device_id", id).apply()
+        id
+    }
+
+    private var firebaseListener: ValueEventListener? = null
+    private var listenerRef: DatabaseReference? = null
+
+    init
+    {
+        if(_roomCode.value != null)
+            startFirebaseListener()
+    }
+
+    private fun loadDefaultStore(): Store
+    {
         val name = prefs.getString("default_store", Store.COUPANG.name) ?: Store.COUPANG.name
         return Store.entries.find { it.name == name } ?: Store.COUPANG
     }
 
-    fun setDefaultStore(store: Store) {
+    fun setDefaultStore(store: Store)
+    {
         prefs.edit().putString("default_store", store.name).apply()
         _defaultStore.value = store
     }
 
+    fun setRoomCode(code: String?)
+    {
+        val trimmed = code?.trim()?.ifEmpty { null }
+        prefs.edit().putString("room_code", trimmed).apply()
+        _roomCode.value = trimmed
+        stopFirebaseListener()
+        if(trimmed != null)
+            startFirebaseListener()
+    }
 
-    fun addItem(name: String) {
+    fun addItem(name: String)
+    {
         if(name.isBlank()) return
         viewModelScope.launch { repository.add(name.trim()) }
     }
 
-    fun toggleCheck(item: ShoppingItem) {
+    fun toggleCheck(item: ShoppingItem)
+    {
         viewModelScope.launch { repository.toggleCheck(item) }
     }
 
-    fun renameItem(item: ShoppingItem, newName: String) {
+    fun renameItem(item: ShoppingItem, newName: String)
+    {
         if(newName.isBlank()) return
         viewModelScope.launch { repository.rename(item, newName.trim()) }
     }
 
-    fun deleteItem(item: ShoppingItem) {
+    fun deleteItem(item: ShoppingItem)
+    {
         viewModelScope.launch {
             repository.delete(item)
             _undoEvent.emit(UndoEvent.Single(item))
         }
     }
 
-    fun undoDelete(event: UndoEvent) {
+    fun undoDelete(event: UndoEvent)
+    {
         viewModelScope.launch {
-            when(event) {
+            when(event)
+            {
                 is UndoEvent.Single -> repository.restore(event.item)
                 is UndoEvent.ClearAll -> repository.restoreAll(event.items)
             }
         }
     }
 
-    fun setImagePath(item: ShoppingItem, path: String) {
+    fun setImagePath(item: ShoppingItem, path: String)
+    {
         viewModelScope.launch { repository.setImagePath(item, path) }
     }
 
-    fun removeImage(item: ShoppingItem) {
+    fun removeImage(item: ShoppingItem)
+    {
         viewModelScope.launch {
             if(item.imagePath.isNotEmpty())
                 File(item.imagePath).delete()
@@ -120,92 +163,138 @@ class ShoppingViewModel(
         }
     }
 
-    fun createZipBytes(items: List<ShoppingItem>): ByteArray {
-        val baos = java.io.ByteArrayOutputStream()
-        ZipOutputStream(baos).use { zip ->
-            val jsonItems = JSONArray()
-            items.forEachIndexed { index, item ->
-                val obj = JSONObject()
-                obj.put("name", item.name)
-                obj.put("checked", item.isChecked)
-                val imgName = if(item.imagePath.isNotEmpty() && File(item.imagePath).exists())
-                    "img_$index.jpg" else ""
-                obj.put("image", imgName)
-                jsonItems.put(obj)
+    fun sendToFirebase()
+    {
+        val code = _roomCode.value
+        if(code == null)
+        {
+            viewModelScope.launch {
+                _snackMessage.emit("설정에서 방 코드를 먼저 입력하세요")
+                _currentScreen.value = Screen.Settings
             }
-            zip.putNextEntry(ZipEntry("list.json"))
-            zip.write(JSONObject().put("items", jsonItems).toString().toByteArray())
-            zip.closeEntry()
-
-            items.forEachIndexed { index, item ->
-                if(item.imagePath.isNotEmpty() && File(item.imagePath).exists()) {
-                    zip.putNextEntry(ZipEntry("img_$index.jpg"))
-                    File(item.imagePath).inputStream().use { it.copyTo(zip) }
-                    zip.closeEntry()
-                }
-            }
+            return
         }
-        return baos.toByteArray()
-    }
-
-    fun importFromZipStream(input: java.io.InputStream) {
-        val imagesDir = File(appContext.filesDir, "images")
-        imagesDir.mkdirs()
-
-        val imageMap = mutableMapOf<String, String>()
-        var jsonContent = ""
-
-        ZipInputStream(input).use { zip ->
-            var entry = zip.nextEntry
-            while(entry != null) {
-                if(entry.name == "list.json")
-                    jsonContent = zip.bufferedReader().readText()
-                else if(entry.name.startsWith("img_")) {
-                    val destFile = File(imagesDir, "${System.currentTimeMillis()}_${entry.name}")
-                    destFile.outputStream().use { out -> zip.copyTo(out) }
-                    imageMap[entry.name] = destFile.absolutePath
-                }
-                zip.closeEntry()
-                entry = zip.nextEntry
-            }
-        }
-
-        if(jsonContent.isEmpty()) return
-
-        val jsonItems = JSONObject(jsonContent).getJSONArray("items")
-        var added = 0
-        var skipped = 0
-
-        kotlinx.coroutines.runBlocking {
-            for(i in 0 until jsonItems.length()) {
-                val obj = jsonItems.getJSONObject(i)
-                val name = obj.getString("name")
-                val checked = obj.getBoolean("checked")
-                val imgFile = obj.optString("image", "")
-                val localPath = if(imgFile.isNotEmpty()) imageMap[imgFile] ?: "" else ""
-                if(name.isNotBlank()) {
-                    if(repository.importItem(name.trim(), checked, localPath))
-                        added++
-                    else
-                        skipped++
-                }
-            }
-        }
-
         viewModelScope.launch {
-            val msg = buildString {
-                if(0 < added) append("${added}개 추가")
-                if(0 < skipped) {
-                    if(isNotEmpty()) append(", ")
-                    append("${skipped}개 중복 제외")
+            try
+            {
+                val db = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+                val ref = db.getReference("rooms/$code/shared")
+
+                val itemsList = items.value.map { item ->
+                    val map = mutableMapOf<String, Any>(
+                        "name" to item.name,
+                        "checked" to item.isChecked
+                    )
+                    if(item.imagePath.isNotEmpty() && File(item.imagePath).exists())
+                    {
+                        val b64 = compressImageToBase64(item.imagePath)
+                        if(b64.isNotEmpty())
+                            map["image"] = b64
+                    }
+                    map
                 }
+                val data = mapOf(
+                    "items" to itemsList,
+                    "sender" to deviceId,
+                    "timestamp" to ServerValue.TIMESTAMP
+                )
+                ref.setValue(data)
+                    .addOnSuccessListener {
+                        viewModelScope.launch { _snackMessage.emit("보내기 완료") }
+                    }
+                    .addOnFailureListener { e ->
+                        viewModelScope.launch { _snackMessage.emit("보내기 실패: ${e.message}") }
+                    }
             }
-            if(msg.isNotEmpty())
-                _snackMessage.emit(msg)
+            catch(e: Exception)
+            {
+                _snackMessage.emit("보내기 실패: ${e.message}")
+            }
         }
     }
 
-    fun clearAll() {
+    private fun startFirebaseListener()
+    {
+        val code = _roomCode.value ?: return
+        val db = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+        val ref = db.getReference("rooms/$code/shared")
+        listenerRef = ref
+
+        firebaseListener = object : ValueEventListener
+        {
+            override fun onDataChange(snapshot: DataSnapshot)
+            {
+                val sender = snapshot.child("sender").getValue(String::class.java) ?: return
+                if(sender == deviceId) return
+
+                val itemsSnap = snapshot.child("items").children.toList()
+                viewModelScope.launch {
+                    var added = 0
+                    for(itemSnap in itemsSnap)
+                    {
+                        val name = itemSnap.child("name").getValue(String::class.java) ?: continue
+                        val checked = itemSnap.child("checked").getValue(Boolean::class.java) ?: false
+                        val imageB64 = itemSnap.child("image").getValue(String::class.java) ?: ""
+
+                        var localPath = ""
+                        if(imageB64.isNotEmpty())
+                            localPath = saveBase64Image(imageB64)
+
+                        if(name.isNotBlank() && repository.importItem(name.trim(), checked, localPath))
+                            added++
+                    }
+                    if(0 < added)
+                        _snackMessage.emit("${added}개 항목 추가됨")
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        ref.addValueEventListener(firebaseListener!!)
+    }
+
+    private fun stopFirebaseListener()
+    {
+        firebaseListener?.let { listenerRef?.removeEventListener(it) }
+        firebaseListener = null
+        listenerRef = null
+    }
+
+    private fun compressImageToBase64(path: String): String
+    {
+        return try
+        {
+            val bitmap = BitmapFactory.decodeFile(path) ?: return ""
+            val max_dim = 300
+            val scale = minOf(max_dim.toFloat() / bitmap.width, max_dim.toFloat() / bitmap.height, 1f)
+            val scaled = Bitmap.createScaledBitmap(
+                bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true
+            )
+            val baos = ByteArrayOutputStream()
+            scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+            if(bitmap !== scaled) scaled.recycle()
+            bitmap.recycle()
+            Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+        }
+        catch(e: Exception) { "" }
+    }
+
+    private fun saveBase64Image(base64: String): String
+    {
+        return try
+        {
+            val bytes = Base64.decode(base64, Base64.NO_WRAP)
+            val imagesDir = File(appContext.filesDir, "images")
+            imagesDir.mkdirs()
+            val file = File(imagesDir, "${System.currentTimeMillis()}_firebase.jpg")
+            file.writeBytes(bytes)
+            file.absolutePath
+        }
+        catch(e: Exception) { "" }
+    }
+
+    fun clearAll()
+    {
         viewModelScope.launch {
             val snapshot = items.value
             repository.clearAll()
@@ -214,11 +303,13 @@ class ShoppingViewModel(
         }
     }
 
-    fun saveAndClear() {
+    fun saveAndClear()
+    {
         viewModelScope.launch {
             val today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
             val currentItems = items.value
-            if(currentItems.isNotEmpty()) {
+            if(currentItems.isNotEmpty())
+            {
                 val snapshot = currentItems.toList()
                 repository.saveAndClear(today, currentItems)
                 _undoEvent.emit(UndoEvent.ClearAll(snapshot))
@@ -227,9 +318,11 @@ class ShoppingViewModel(
         }
     }
 
-    fun navigateTo(screen: Screen) {
+    fun navigateTo(screen: Screen)
+    {
         _currentScreen.value = screen
-        if(screen is Screen.HistoryDetail) {
+        if(screen is Screen.HistoryDetail)
+        {
             viewModelScope.launch {
                 repository.getSavedItems(screen.listId).collect {
                     _selectedListItems.value = it
@@ -238,8 +331,10 @@ class ShoppingViewModel(
         }
     }
 
-    fun goBack() {
-        _currentScreen.value = when(_currentScreen.value) {
+    fun goBack()
+    {
+        _currentScreen.value = when(_currentScreen.value)
+        {
             is Screen.HistoryDetail -> Screen.HistoryList
             is Screen.HistoryList -> Screen.ShoppingList
             is Screen.Settings -> Screen.ShoppingList
@@ -247,7 +342,8 @@ class ShoppingViewModel(
         }
     }
 
-    fun importItems(names: List<String>) {
+    fun importItems(names: List<String>)
+    {
         viewModelScope.launch {
             var added = 0
             names.forEach { name ->
@@ -257,7 +353,8 @@ class ShoppingViewModel(
             val skipped = names.count { it.isNotBlank() } - added
             val msg = buildString {
                 if(0 < added) append("${added}개 추가")
-                if(0 < skipped) {
+                if(0 < skipped)
+                {
                     if(isNotEmpty()) append(", ")
                     append("${skipped}개 중복 제외")
                 }
@@ -267,16 +364,30 @@ class ShoppingViewModel(
         }
     }
 
-    fun deleteSavedList(listId: Long) {
+    fun deleteSavedList(listId: Long)
+    {
         viewModelScope.launch { repository.deleteSavedList(listId) }
+    }
+
+    override fun onCleared()
+    {
+        super.onCleared()
+        stopFirebaseListener()
     }
 
     class Factory(
         private val repository: ShoppingRepository,
         private val appContext: Context
-    ) : ViewModelProvider.Factory {
+    ) : ViewModelProvider.Factory
+    {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T =
             ShoppingViewModel(repository, appContext) as T
+    }
+
+    companion object
+    {
+        private const val FIREBASE_DB_URL =
+            "https://shoplist-d6e26-default-rtdb.asia-southeast1.firebasedatabase.app"
     }
 }

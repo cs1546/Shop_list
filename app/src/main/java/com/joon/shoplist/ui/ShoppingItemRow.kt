@@ -53,7 +53,8 @@ fun ShoppingItemRow(
     onSearch: (Store) -> Unit,
     onAttachImage: () -> Unit,
     onRemoveImage: () -> Unit,
-    onViewImage: () -> Unit
+    onViewImage: () -> Unit,
+    onPasteImage: () -> Unit
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
     var menuExpanded by remember { mutableStateOf(false) }
@@ -155,6 +156,13 @@ fun ShoppingItemRow(
                         onClick = {
                             menuExpanded = false
                             onAttachImage()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("클립보드에서 붙여넣기") },
+                        onClick = {
+                            menuExpanded = false
+                            onPasteImage()
                         }
                     )
                     if(hasImage) {

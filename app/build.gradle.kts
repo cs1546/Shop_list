@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.room)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -74,5 +75,6 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.coil.compose)
-    implementation(libs.documentfile)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.database)
 }

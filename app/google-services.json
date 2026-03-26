@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1071828601452",
+    "project_id": "shoplist-d6e26",
+    "storage_bucket": "shoplist-d6e26.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1071828601452:android:98ee9baabd56d544406649",
+        "android_client_info": {
+          "package_name": "com.joon.shoplist"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBYPm4b1NtUinP4spNggROxpkvsCH0CvMk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
