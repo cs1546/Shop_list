@@ -15,6 +15,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -105,6 +106,9 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel)
                         enabled = items.isNotEmpty()
                     ) {
                         Icon(Icons.Default.KeyboardArrowUp, contentDescription = "보내기")
+                    }
+                    IconButton(onClick = { viewModel.receiveFromFirebase() }) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "받아오기")
                     }
                     IconButton(onClick = { viewModel.navigateTo(Screen.Settings) }) {
                         Icon(Icons.Default.Settings, contentDescription = "설정")

@@ -213,6 +213,55 @@ class ShoppingViewModel(
         }
     }
 
+    fun receiveFromFirebase()
+    {
+        val code = _roomCode.value
+        if(code == null)
+        {
+            viewModelScope.launch {
+                _snackMessage.emit("설정에서 방 코드를 먼저 입력하세요")
+                _currentScreen.value = Screen.Settings
+            }
+            return
+        }
+        val db = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
+        val ref = db.getReference("rooms/$code/shared")
+        ref.get().addOnSuccessListener { snapshot ->
+            viewModelScope.launch { importFromSnapshot(snapshot, true) }
+        }.addOnFailureListener { e ->
+            viewModelScope.launch { _snackMessage.emit("받아오기 실패: ${e.message}") }
+        }
+    }
+
+    private suspend fun importFromSnapshot(snapshot: DataSnapshot, showEmpty: Boolean = false)
+    {
+        val itemsSnap = snapshot.child("items").children.toList()
+        if(itemsSnap.isEmpty())
+        {
+            if(showEmpty)
+                _snackMessage.emit("공유된 리스트가 없습니다")
+            return
+        }
+        var added = 0
+        for(itemSnap in itemsSnap)
+        {
+            val name = itemSnap.child("name").getValue(String::class.java) ?: continue
+            val checked = itemSnap.child("checked").getValue(Boolean::class.java) ?: false
+            val imageB64 = itemSnap.child("image").getValue(String::class.java) ?: ""
+
+            var localPath = ""
+            if(imageB64.isNotEmpty())
+                localPath = saveBase64Image(imageB64)
+
+            if(name.isNotBlank() && repository.importItem(name.trim(), checked, localPath))
+                added++
+        }
+        if(0 < added)
+            _snackMessage.emit("${added}개 항목 추가됨")
+        else if(showEmpty)
+            _snackMessage.emit("새로운 항목 없음")
+    }
+
     private fun startFirebaseListener()
     {
         val code = _roomCode.value ?: return
@@ -227,25 +276,7 @@ class ShoppingViewModel(
                 val sender = snapshot.child("sender").getValue(String::class.java) ?: return
                 if(sender == deviceId) return
 
-                val itemsSnap = snapshot.child("items").children.toList()
-                viewModelScope.launch {
-                    var added = 0
-                    for(itemSnap in itemsSnap)
-                    {
-                        val name = itemSnap.child("name").getValue(String::class.java) ?: continue
-                        val checked = itemSnap.child("checked").getValue(Boolean::class.java) ?: false
-                        val imageB64 = itemSnap.child("image").getValue(String::class.java) ?: ""
-
-                        var localPath = ""
-                        if(imageB64.isNotEmpty())
-                            localPath = saveBase64Image(imageB64)
-
-                        if(name.isNotBlank() && repository.importItem(name.trim(), checked, localPath))
-                            added++
-                    }
-                    if(0 < added)
-                        _snackMessage.emit("${added}개 항목 추가됨")
-                }
+                viewModelScope.launch { importFromSnapshot(snapshot) }
             }
 
             override fun onCancelled(error: DatabaseError) {}
