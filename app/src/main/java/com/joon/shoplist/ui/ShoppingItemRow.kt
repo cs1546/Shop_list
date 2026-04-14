@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
@@ -54,7 +55,8 @@ fun ShoppingItemRow(
     onAttachImage: () -> Unit,
     onRemoveImage: () -> Unit,
     onViewImage: () -> Unit,
-    onPasteImage: () -> Unit
+    onPasteImage: () -> Unit,
+    dragHandle: (@Composable () -> Unit)? = null
 ) {
     val dismissState = rememberSwipeToDismissBoxState()
     var menuExpanded by remember { mutableStateOf(false) }
@@ -96,6 +98,8 @@ fun ShoppingItemRow(
                 .padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if(dragHandle != null)
+                dragHandle()
             Checkbox(checked = item.isChecked, onCheckedChange = { onToggle() })
 
             Column(

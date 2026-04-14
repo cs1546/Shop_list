@@ -31,6 +31,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -42,8 +43,13 @@ fun SettingsScreen(viewModel: ShoppingViewModel)
 {
     val defaultStore by viewModel.defaultStore.collectAsState()
     val roomCode by viewModel.roomCode.collectAsState()
+    val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     var codeInput by remember { mutableStateOf(roomCode ?: "") }
+    val versionName = remember {
+        try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0" }
+        catch(e: Exception) { "0" }
+    }
 
     Scaffold(
         topBar = {
@@ -154,6 +160,28 @@ fun SettingsScreen(viewModel: ShoppingViewModel)
                         style = MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.padding(start = 8.dp)
                     )
+                }
+            }
+
+            item {
+                Text(
+                    text = "앱 정보",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(start = 16.dp, top = 24.dp, bottom = 8.dp)
+                )
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "현재 버전: $versionName",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    OutlinedButton(
+                        onClick = { viewModel.checkUpdate(versionName) },
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Text("업데이트 확인")
+                    }
                 }
             }
         }

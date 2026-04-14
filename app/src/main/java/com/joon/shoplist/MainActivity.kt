@@ -36,6 +36,9 @@ class MainActivity : ComponentActivity() {
 
         handleIncomingIntent(intent)
 
+        val versionName = packageManager.getPackageInfo(packageName, 0).versionName ?: "0"
+        viewModel.checkUpdate(versionName, silent = true)
+
         setContent {
             ShopListTheme {
                 val screen by viewModel.currentScreen.collectAsState()

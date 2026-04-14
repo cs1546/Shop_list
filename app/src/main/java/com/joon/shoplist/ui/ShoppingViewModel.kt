@@ -18,6 +18,8 @@ import com.joon.shoplist.data.SavedShoppingList
 import com.joon.shoplist.data.ShoppingItem
 import com.joon.shoplist.data.ShoppingRepository
 import com.joon.shoplist.util.Store
+import com.joon.shoplist.util.UpdateChecker
+import com.joon.shoplist.util.UpdateInfo
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -84,6 +86,9 @@ class ShoppingViewModel(
 
     private var firebaseListener: ValueEventListener? = null
     private var listenerRef: DatabaseReference? = null
+
+    private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
+    val updateInfo: StateFlow<UpdateInfo?> = _updateInfo.asStateFlow()
 
     init
     {
@@ -160,6 +165,43 @@ class ShoppingViewModel(
             if(item.imagePath.isNotEmpty())
                 File(item.imagePath).delete()
             repository.setImagePath(item, "")
+        }
+    }
+
+    fun reorderItems(newOrder: List<ShoppingItem>)
+    {
+        viewModelScope.launch { repository.reorderItems(newOrder) }
+    }
+
+    fun checkUpdate(currentVersion: String, silent: Boolean = false)
+    {
+        viewModelScope.launch {
+            val info = UpdateChecker.check(currentVersion)
+            if(info != null)
+                _updateInfo.value = info
+            else if(!silent)
+                _snackMessage.emit("최신 버전입니다")
+        }
+    }
+
+    fun dismissUpdate()
+    {
+        _updateInfo.value = null
+    }
+
+    fun downloadAndInstall()
+    {
+        val info = _updateInfo.value ?: return
+        viewModelScope.launch {
+            _snackMessage.emit("다운로드 중...")
+            val file = UpdateChecker.download(appContext, info.downloadUrl)
+            if(file == null)
+            {
+                _snackMessage.emit("다운로드 실패")
+                return@launch
+            }
+            _updateInfo.value = null
+            UpdateChecker.install(appContext, file)
         }
     }
 

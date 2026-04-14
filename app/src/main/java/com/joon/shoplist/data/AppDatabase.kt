@@ -5,6 +5,8 @@ import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
     entities = [
@@ -12,18 +14,28 @@ import androidx.room.RoomDatabase
         SavedShoppingList::class,
         SavedShoppingItem::class
     ],
-    version = 3,
+    version = 4,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3)
     ]
 )
-abstract class AppDatabase : RoomDatabase() {
-
+abstract class AppDatabase : RoomDatabase()
+{
     abstract fun shoppingDao(): ShoppingDao
     abstract fun historyDao(): HistoryDao
 
-    companion object {
+    companion object
+    {
+        private val MIGRATION_3_4 = object : Migration(3, 4)
+        {
+            override fun migrate(db: SupportSQLiteDatabase)
+            {
+                db.execSQL("ALTER TABLE shopping_items ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE shopping_items SET sort_order = created_at")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -33,7 +45,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "shopping.db"
-                ).build().also { INSTANCE = it }
+                )
+                    .addMigrations(MIGRATION_3_4)
+                    .build()
+                    .also { INSTANCE = it }
             }
     }
 }

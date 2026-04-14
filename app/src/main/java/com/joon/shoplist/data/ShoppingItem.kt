@@ -18,5 +18,8 @@ data class ShoppingItem(
     val createdAt: Long = System.currentTimeMillis(),
 
     @ColumnInfo(name = "image_path", defaultValue = "")
-    val imagePath: String = ""
+    val imagePath: String = "",
+
+    @ColumnInfo(name = "sort_order", defaultValue = "0")
+    val sortOrder: Long = 0L
 )

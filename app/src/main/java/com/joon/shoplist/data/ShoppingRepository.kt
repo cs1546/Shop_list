@@ -10,7 +10,7 @@ class ShoppingRepository(
     val allItems: Flow<List<ShoppingItem>> = dao.getAllItems()
 
     suspend fun add(name: String) {
-        dao.insert(ShoppingItem(name = name))
+        dao.insert(ShoppingItem(name = name, sortOrder = dao.getMaxSortOrder() + 1))
     }
 
     suspend fun importItem(name: String, isChecked: Boolean, imagePath: String): Boolean {
@@ -21,15 +21,24 @@ class ShoppingRepository(
             dao.update(existing.copy(isChecked = isChecked, imagePath = imagePath))
             return true
         }
-        dao.insert(ShoppingItem(name = name, isChecked = isChecked, imagePath = imagePath))
+        dao.insert(ShoppingItem(
+            name = name,
+            isChecked = isChecked,
+            imagePath = imagePath,
+            sortOrder = dao.getMaxSortOrder() + 1
+        ))
         return true
     }
 
     suspend fun addIfNotExists(name: String): Boolean {
         if(dao.findByName(name) != null)
             return false
-        dao.insert(ShoppingItem(name = name))
+        dao.insert(ShoppingItem(name = name, sortOrder = dao.getMaxSortOrder() + 1))
         return true
+    }
+
+    suspend fun reorderItems(items: List<ShoppingItem>) {
+        dao.reorder(items)
     }
 
     suspend fun toggleCheck(item: ShoppingItem) {

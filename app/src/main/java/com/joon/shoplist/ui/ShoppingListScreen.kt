@@ -11,19 +11,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -45,6 +49,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.joon.shoplist.data.ShoppingItem
 import com.joon.shoplist.util.SearchUrlHelper
+import sh.calvin.reorderable.ReorderableItem
+import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,6 +59,7 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel)
 {
     val items by viewModel.items.collectAsState()
     val defaultStore by viewModel.defaultStore.collectAsState()
+    val updateInfo by viewModel.updateInfo.collectAsState()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -153,33 +160,52 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel)
         }
         else
         {
+            val lazyListState = rememberLazyListState()
+            val reorderState = rememberReorderableLazyListState(lazyListState) { from, to ->
+                val reordered = items.toMutableList().apply {
+                    add(to.index, removeAt(from.index))
+                }
+                viewModel.reorderItems(reordered)
+            }
+
             LazyColumn(
+                state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding)
             ) {
                 items(items, key = { it.id }) { item ->
-                    ShoppingItemRow(
-                        item = item,
-                        defaultStore = defaultStore,
-                        onToggle = { viewModel.toggleCheck(item) },
-                        onEdit = { editTarget = item },
-                        onDelete = { viewModel.deleteItem(item) },
-                        onSearch = { store ->
-                            openUrl(context, SearchUrlHelper.buildUrl(store, item.name))
-                        },
-                        onAttachImage = {
-                            imagePickTarget = item
-                            imagePickerLauncher.launch("image/*")
-                        },
-                        onRemoveImage = { viewModel.removeImage(item) },
-                        onViewImage = { viewImage(context, item.imagePath) },
-                        onPasteImage = {
-                            val path = pasteImageFromClipboard(context, item.id)
-                            if(path != null)
-                                viewModel.setImagePath(item, path)
-                        }
-                    )
+                    ReorderableItem(reorderState, key = item.id) {
+                        ShoppingItemRow(
+                            item = item,
+                            defaultStore = defaultStore,
+                            onToggle = { viewModel.toggleCheck(item) },
+                            onEdit = { editTarget = item },
+                            onDelete = { viewModel.deleteItem(item) },
+                            onSearch = { store ->
+                                openUrl(context, SearchUrlHelper.buildUrl(store, item.name))
+                            },
+                            onAttachImage = {
+                                imagePickTarget = item
+                                imagePickerLauncher.launch("image/*")
+                            },
+                            onRemoveImage = { viewModel.removeImage(item) },
+                            onViewImage = { viewImage(context, item.imagePath) },
+                            onPasteImage = {
+                                val path = pasteImageFromClipboard(context, item.id)
+                                if(path != null)
+                                    viewModel.setImagePath(item, path)
+                            },
+                            dragHandle = {
+                                IconButton(
+                                    onClick = {},
+                                    modifier = Modifier.draggableHandle()
+                                ) {
+                                    Icon(Icons.Default.Menu, contentDescription = "순서 변경")
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -219,6 +245,29 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel)
             onConfirm = { newName ->
                 viewModel.renameItem(item, newName)
                 editTarget = null
+            }
+        )
+    }
+
+    updateInfo?.let { info ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissUpdate() },
+            title = { Text("새 버전 있음: ${info.latestVersion}") },
+            text = {
+                Text(
+                    if(info.notes.isNotBlank()) info.notes
+                    else "새 버전으로 업데이트하시겠습니까?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.downloadAndInstall() }) {
+                    Text("업데이트")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissUpdate() }) {
+                    Text("나중에")
+                }
             }
         )
     }
