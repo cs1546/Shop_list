@@ -21,13 +21,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -249,28 +247,11 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel)
         )
     }
 
-    updateInfo?.let { info ->
-        AlertDialog(
-            onDismissRequest = { viewModel.dismissUpdate() },
-            title = { Text("새 버전 있음: ${info.latestVersion}") },
-            text = {
-                Text(
-                    if(info.notes.isNotBlank()) info.notes
-                    else "새 버전으로 업데이트하시겠습니까?"
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = { viewModel.downloadAndInstall() }) {
-                    Text("업데이트")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.dismissUpdate() }) {
-                    Text("나중에")
-                }
-            }
-        )
-    }
+    UpdateDialog(
+        info = updateInfo,
+        onUpdate = { viewModel.downloadAndInstall() },
+        onDismiss = { viewModel.dismissUpdate() }
+    )
 }
 
 private fun copyImageToInternal(context: Context, uri: Uri, itemId: Long): String?

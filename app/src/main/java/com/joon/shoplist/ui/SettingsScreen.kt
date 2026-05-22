@@ -20,10 +20,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,12 +47,20 @@ fun SettingsScreen(viewModel: ShoppingViewModel)
 {
     val defaultStore by viewModel.defaultStore.collectAsState()
     val roomCode by viewModel.roomCode.collectAsState()
+    val updateInfo by viewModel.updateInfo.collectAsState()
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
+    val snackbarHostState = remember { SnackbarHostState() }
     var codeInput by remember { mutableStateOf(roomCode ?: "") }
     val versionName = remember {
         try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0" }
         catch(e: Exception) { "0" }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.snackMessage.collect { message ->
+            snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Short)
+        }
     }
 
     Scaffold(
@@ -65,7 +77,8 @@ fun SettingsScreen(viewModel: ShoppingViewModel)
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -186,4 +199,10 @@ fun SettingsScreen(viewModel: ShoppingViewModel)
             }
         }
     }
+
+    UpdateDialog(
+        info = updateInfo,
+        onUpdate = { viewModel.downloadAndInstall() },
+        onDismiss = { viewModel.dismissUpdate() }
+    )
 }
