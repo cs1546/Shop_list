@@ -7,6 +7,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -170,7 +171,9 @@ fun ShoppingListScreen(viewModel: ShoppingViewModel)
                 state = lazyListState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
+                    .padding(padding),
+                // FAB(+)가 마지막 행의 메뉴 버튼을 가리지 않도록 하단 여백 확보
+                contentPadding = PaddingValues(bottom = 88.dp)
             ) {
                 items(items, key = { it.id }) { item ->
                     ReorderableItem(reorderState, key = item.id) {
