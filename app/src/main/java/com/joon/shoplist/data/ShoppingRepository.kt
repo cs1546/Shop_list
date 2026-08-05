@@ -1,6 +1,7 @@
 package com.joon.shoplist.data
 
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 
 class ShoppingRepository(
     private val dao: ShoppingDao,
@@ -16,9 +17,12 @@ class ShoppingRepository(
     suspend fun importItem(name: String, isChecked: Boolean, imagePath: String): Boolean {
         val existing = dao.findByName(name)
         if(existing != null) {
+            // 기존 항목은 로컬 체크 상태 유지 — 수신 데이터가 체크를 덮어쓰면 안 됨
             if(imagePath.isEmpty())
                 return false
-            dao.update(existing.copy(isChecked = isChecked, imagePath = imagePath))
+            if(existing.imagePath.isNotEmpty() && existing.imagePath != imagePath)
+                File(existing.imagePath).delete()
+            dao.update(existing.copy(imagePath = imagePath))
             return true
         }
         dao.insert(ShoppingItem(
