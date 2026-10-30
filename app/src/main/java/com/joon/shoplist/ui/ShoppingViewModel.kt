@@ -359,7 +359,8 @@ class ShoppingViewModel(
             val bytes = Base64.decode(base64, Base64.NO_WRAP)
             val imagesDir = File(appContext.filesDir, "images")
             imagesDir.mkdirs()
-            val file = File(imagesDir, "${System.currentTimeMillis()}_firebase.jpg")
+            // 여러 항목을 같은 밀리초에 저장하므로 시각만으로 이름을 지으면 서로 덮어씀
+            val file = File(imagesDir, "${System.currentTimeMillis()}_${java.util.UUID.randomUUID()}_firebase.jpg")
             file.writeBytes(bytes)
             file.absolutePath
         }
