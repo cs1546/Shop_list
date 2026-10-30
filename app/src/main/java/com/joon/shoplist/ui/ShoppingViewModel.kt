@@ -20,6 +20,7 @@ import com.joon.shoplist.data.ShoppingRepository
 import com.joon.shoplist.util.Store
 import com.joon.shoplist.util.UpdateChecker
 import com.joon.shoplist.util.UpdateInfo
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,6 +29,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.time.LocalDate
@@ -333,18 +335,27 @@ class ShoppingViewModel(
         listenerRef = null
     }
 
-    private fun compressImageToBase64(path: String): String
+    // 디코딩/압축이 무거워 메인 스레드에서 돌리면 화면이 멈춤
+    private suspend fun compressImageToBase64(path: String): String = withContext(Dispatchers.Default)
     {
-        return try
+        try
         {
-            val bitmap = BitmapFactory.decodeFile(path) ?: return ""
-            val max_dim = 300
+            // 글자가 읽힐 정도의 해상도 유지 — 300px로 줄이면 상품 캡처의 글자가 깨짐
+            val max_dim = 1024
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeFile(path, bounds)
+            var sample = 1
+            while(max_dim * 2 <= maxOf(bounds.outWidth, bounds.outHeight) / sample)
+                sample *= 2
+            val opts = BitmapFactory.Options().apply { inSampleSize = sample }
+            val bitmap = BitmapFactory.decodeFile(path, opts) ?: return@withContext ""
             val scale = minOf(max_dim.toFloat() / bitmap.width, max_dim.toFloat() / bitmap.height, 1f)
             val scaled = Bitmap.createScaledBitmap(
-                bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true
+                bitmap, (bitmap.width * scale).toInt().coerceAtLeast(1),
+                (bitmap.height * scale).toInt().coerceAtLeast(1), true
             )
             val baos = ByteArrayOutputStream()
-            scaled.compress(Bitmap.CompressFormat.JPEG, 70, baos)
+            scaled.compress(Bitmap.CompressFormat.JPEG, 85, baos)
             if(bitmap !== scaled) scaled.recycle()
             bitmap.recycle()
             Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
@@ -352,9 +363,9 @@ class ShoppingViewModel(
         catch(e: Exception) { "" }
     }
 
-    private fun saveBase64Image(base64: String): String
+    private suspend fun saveBase64Image(base64: String): String = withContext(Dispatchers.IO)
     {
-        return try
+        try
         {
             val bytes = Base64.decode(base64, Base64.NO_WRAP)
             val imagesDir = File(appContext.filesDir, "images")
