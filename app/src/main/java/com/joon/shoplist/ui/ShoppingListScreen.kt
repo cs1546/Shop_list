@@ -1,9 +1,11 @@
 package com.joon.shoplist.ui
 
+import android.content.ActivityNotFoundException
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
@@ -303,5 +305,16 @@ private fun viewImage(context: Context, imagePath: String)
 
 private fun openUrl(context: Context, url: String)
 {
-    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+    // 쇼핑앱을 별도 태스크로 띄워야 최근 앱(멀티키)에서 이 앱과 따로 전환 가능
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+    try
+    {
+        context.startActivity(intent)
+    }
+    catch(e: ActivityNotFoundException)
+    {
+        Toast.makeText(context, "열 수 있는 앱이 없습니다", Toast.LENGTH_SHORT).show()
+    }
 }
