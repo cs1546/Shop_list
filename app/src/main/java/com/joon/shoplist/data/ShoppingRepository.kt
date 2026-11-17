@@ -10,6 +10,8 @@ class ShoppingRepository(
 
     val allItems: Flow<List<ShoppingItem>> = dao.getAllItems()
 
+    suspend fun currentItems(): List<ShoppingItem> = dao.getAllItemsOnce()
+
     suspend fun add(name: String) {
         dao.insert(ShoppingItem(name = name, sortOrder = dao.getMaxSortOrder() + 1))
     }

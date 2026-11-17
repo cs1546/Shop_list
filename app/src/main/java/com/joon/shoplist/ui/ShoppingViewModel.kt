@@ -29,6 +29,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -87,6 +89,8 @@ class ShoppingViewModel(
     }
 
     private var firebaseListener: ValueEventListener? = null
+    // 리스너와 수동 받아오기가 동시에 들어와 저장/클리어가 겹치지 않도록 직렬화
+    private val importMutex = Mutex()
     private var listenerRef: DatabaseReference? = null
 
     private val _updateInfo = MutableStateFlow<UpdateInfo?>(null)
@@ -244,6 +248,7 @@ class ShoppingViewModel(
                 )
                 ref.setValue(data)
                     .addOnSuccessListener {
+                        markSynced(code, System.currentTimeMillis())
                         viewModelScope.launch { _snackMessage.emit("보내기 완료") }
                     }
                     .addOnFailureListener { e ->
@@ -271,21 +276,54 @@ class ShoppingViewModel(
         val db = FirebaseDatabase.getInstance(FIREBASE_DB_URL)
         val ref = db.getReference("rooms/$code/shared")
         ref.get().addOnSuccessListener { snapshot ->
-            viewModelScope.launch { importFromSnapshot(snapshot, true) }
+            viewModelScope.launch { importFromSnapshot(code, snapshot, true) }
         }.addOnFailureListener { e ->
             viewModelScope.launch { _snackMessage.emit("받아오기 실패: ${e.message}") }
         }
     }
 
-    private suspend fun importFromSnapshot(snapshot: DataSnapshot, showEmpty: Boolean = false)
+    private fun syncKey(code: String) = "last_sync_$code"
+
+    private fun markSynced(code: String, time: Long)
     {
+        if(prefs.getLong(syncKey(code), 0L) < time)
+            prefs.edit().putLong(syncKey(code), time).apply()
+    }
+
+    // manual: 사용자가 직접 받아오기를 누른 경우 — 이미 받은 데이터라도 다시 병합
+    private suspend fun importFromSnapshot(code: String, snapshot: DataSnapshot, manual: Boolean = false) = importMutex.withLock {
         val itemsSnap = snapshot.child("items").children.toList()
         if(itemsSnap.isEmpty())
         {
-            if(showEmpty)
+            if(manual)
                 _snackMessage.emit("공유된 리스트가 없습니다")
-            return
+            return@withLock
         }
+
+        val serverTime = snapshot.child("timestamp").getValue(Long::class.java) ?: 0L
+        val lastSync = prefs.getLong(syncKey(code), 0L)
+        val localItems = repository.currentItems()
+        if(!manual)
+        {
+            // 리스너는 앱을 켤 때마다 서버의 현재 값을 다시 내려주므로 이미 반영한 데이터는 무시
+            if(serverTime <= lastSync)
+                return@withLock
+            // 동기화 기록이 없는 첫 실행(업데이트 직후)은 기존 리스트가 이미 받은 것으로 간주
+            if(lastSync == 0L && localItems.isNotEmpty())
+            {
+                markSynced(code, serverTime)
+                return@withLock
+            }
+        }
+
+        // 마지막 동기화 후 24시간 넘게 지나 새 리스트가 오면 다른 장보기로 보고 기존 리스트를 기록에 저장 후 교체
+        val isNewTrip = 0L < lastSync && NEW_TRIP_GAP_MS <= serverTime - lastSync
+        if(isNewTrip && localItems.isNotEmpty())
+        {
+            val today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+            repository.saveAndClear(today, localItems)
+        }
+
         var added = 0
         for(itemSnap in itemsSnap)
         {
@@ -300,9 +338,12 @@ class ShoppingViewModel(
             if(name.isNotBlank() && repository.importItem(name.trim(), checked, localPath))
                 added++
         }
-        if(0 < added)
+        markSynced(code, serverTime)
+        if(isNewTrip && localItems.isNotEmpty())
+            _snackMessage.emit("이전 리스트를 저장하고 새 리스트 ${added}개를 받음")
+        else if(0 < added)
             _snackMessage.emit("${added}개 항목 추가됨")
-        else if(showEmpty)
+        else if(manual)
             _snackMessage.emit("새로운 항목 없음")
     }
 
@@ -320,7 +361,7 @@ class ShoppingViewModel(
                 val sender = snapshot.child("sender").getValue(String::class.java) ?: return
                 if(sender == deviceId) return
 
-                viewModelScope.launch { importFromSnapshot(snapshot) }
+                viewModelScope.launch { importFromSnapshot(code, snapshot) }
             }
 
             override fun onCancelled(error: DatabaseError) {}
@@ -472,6 +513,7 @@ class ShoppingViewModel(
 
     companion object
     {
+        private const val NEW_TRIP_GAP_MS = 24 * 60 * 60 * 1000L
         private const val FIREBASE_DB_URL =
             "https://shoplist-d6e26-default-rtdb.asia-southeast1.firebasedatabase.app"
     }

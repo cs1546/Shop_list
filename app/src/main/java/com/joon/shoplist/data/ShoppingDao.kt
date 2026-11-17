@@ -14,6 +14,9 @@ interface ShoppingDao
     @Query("SELECT * FROM shopping_items ORDER BY is_checked ASC, sort_order ASC, created_at ASC")
     fun getAllItems(): Flow<List<ShoppingItem>>
 
+    @Query("SELECT * FROM shopping_items ORDER BY is_checked ASC, sort_order ASC, created_at ASC")
+    suspend fun getAllItemsOnce(): List<ShoppingItem>
+
     @Query("SELECT * FROM shopping_items WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): ShoppingItem?
 
