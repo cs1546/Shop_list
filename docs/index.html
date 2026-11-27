@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>쇼핑 체크리스트</title>
+<style>
+:root
+{
+	--bg: #f6f7fb;
+	--surface: #ffffff;
+	--text: #1b1c20;
+	--sub: #6b6f7b;
+	--line: #e3e5ec;
+	--primary: #3d5afe;
+	--primary-text: #ffffff;
+	--danger: #d93025;
+	--warn-bg: #fff4d6;
+	--warn-text: #7a5a00;
+}
+@media (prefers-color-scheme: dark)
+{
+	:root
+	{
+		--bg: #121318;
+		--surface: #1d1f26;
+		--text: #e6e7ec;
+		--sub: #9a9eab;
+		--line: #2e313b;
+		--primary: #8c9eff;
+		--primary-text: #10123a;
+		--danger: #ff6b60;
+		--warn-bg: #3a3014;
+		--warn-text: #f1d48a;
+	}
+}
+*
+{
+	box-sizing: border-box;
+}
+body
+{
+	margin: 0;
+	background: var(--bg);
+	color: var(--text);
+	font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif;
+	font-size: 15px;
+}
+.wrap
+{
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 20px 16px 120px;
+}
+h1
+{
+	font-size: 22px;
+	margin: 0 0 16px;
+}
+.bar
+{
+	display: flex;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+input[type=text]
+{
+	flex: 1;
+	min-width: 0;
+	padding: 10px 12px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface);
+	color: var(--text);
+	font-size: 15px;
+}
+button
+{
+	padding: 10px 14px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+	background: var(--surface);
+	color: var(--text);
+	font-size: 14px;
+	cursor: pointer;
+	white-space: nowrap;
+}
+button.primary
+{
+	background: var(--primary);
+	border-color: var(--primary);
+	color: var(--primary-text);
+	font-weight: 600;
+}
+button.small
+{
+	padding: 6px 10px;
+	font-size: 13px;
+}
+button.danger
+{
+	color: var(--danger);
+}
+button:disabled
+{
+	opacity: 0.5;
+	cursor: default;
+}
+.status
+{
+	color: var(--sub);
+	font-size: 13px;
+	min-height: 18px;
+	margin: 4px 0 16px;
+}
+.notice
+{
+	background: var(--warn-bg);
+	color: var(--warn-text);
+	border-radius: 8px;
+	padding: 10px 12px;
+	font-size: 13px;
+	line-height: 1.5;
+	margin-bottom: 16px;
+}
+ul
+{
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	overflow: hidden;
+}
+li
+{
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	border-top: 1px solid var(--line);
+	outline: none;
+}
+li:first-child
+{
+	border-top: none;
+}
+li:focus
+{
+	background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+li input[type=checkbox]
+{
+	width: 20px;
+	height: 20px;
+	flex: none;
+}
+.name
+{
+	flex: 1;
+	min-width: 0;
+	word-break: break-all;
+	cursor: text;
+}
+li.checked .name
+{
+	text-decoration: line-through;
+	color: var(--sub);
+}
+.thumb
+{
+	width: 64px;
+	height: 64px;
+	flex: none;
+	object-fit: cover;
+	border-radius: 8px;
+	cursor: zoom-in;
+}
+.actions
+{
+	display: flex;
+	gap: 4px;
+	flex: none;
+}
+.empty
+{
+	padding: 32px;
+	text-align: center;
+	color: var(--sub);
+}
+.send_bar
+{
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 12px 16px;
+	background: var(--surface);
+	border-top: 1px solid var(--line);
+}
+.send_bar .inner
+{
+	max-width: 720px;
+	margin: 0 auto;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.send_bar .dirty
+{
+	flex: 1;
+	color: var(--sub);
+	font-size: 13px;
+}
+.viewer
+{
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.8);
+	display: none;
+	align-items: center;
+	justify-content: center;
+	cursor: zoom-out;
+}
+.viewer.show
+{
+	display: flex;
+}
+.viewer img
+{
+	max-width: 95vw;
+	max-height: 95vh;
+}
+@media (max-width: 480px)
+{
+	.thumb
+	{
+		width: 48px;
+		height: 48px;
+	}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+	<h1>쇼핑 체크리스트</h1>
+
+	<div class="bar">
+		<input id="room_input" type="text" placeholder="방 코드" autocomplete="off">
+		<button id="load_btn">불러오기</button>
+	</div>
+	<div id="status" class="status"></div>
+
+	<div class="notice">
+		폰에서 받아오면 <b>새 항목 추가와 사진</b>만 기존 리스트에 합쳐집니다.
+		여기서 삭제·이름 변경·체크한 내용은 폰의 기존 항목에 반영되지 않습니다.
+		단, 폰이 마지막으로 주고받은 지 24시간이 지났다면 폰의 기존 리스트는 기록에 저장되고 이 리스트로 바뀝니다.
+	</div>
+
+	<div class="bar">
+		<input id="add_input" type="text" placeholder="항목 이름 (여러 줄 붙여넣기 가능)" autocomplete="off">
+		<button id="add_btn">추가</button>
+	</div>
+	<div class="status">항목을 클릭한 뒤 Ctrl+V로 클립보드 이미지를 붙일 수 있습니다. 이름을 더블클릭하면 수정합니다.</div>
+
+	<ul id="list"></ul>
+</div>
+
+<div class="send_bar">
+	<div class="inner">
+		<span id="dirty_label" class="dirty"></span>
+		<button id="send_btn" class="primary">보내기</button>
+	</div>
+</div>
+
+<div id="viewer" class="viewer"><img id="viewer_img" alt=""></div>
+<input id="file_input" type="file" accept="image/*" hidden>
+
+<script>
+// 앱(ShoppingViewModel)과 같은 Realtime Database 경로/형식을 REST API로 읽고 쓴다
+const DB_URL = "https://shoplist-d6e26-default-rtdb.asia-southeast1.firebasedatabase.app";
+// 앱의 compressImageToBase64와 같은 기준
+const MAX_DIM = 1024;
+const JPEG_QUALITY = 0.85;
+
+let room_code = "";
+let items = [];
+let loaded_timestamp = null;
+let dirty = false;
+let file_target = null;
+
+const $ = id => document.getElementById(id);
+
+function storage_get(key)
+{
+	try
+	{
+		return localStorage.getItem(key);
+	}
+	catch(e)
+	{
+		return null;
+	}
+}
+
+function storage_set(key, value)
+{
+	try
+	{
+		localStorage.setItem(key, value);
+	}
+	catch(e)
+	{
+	}
+}
+
+// 앱은 sender가 자기 deviceId와 같으면 무시하므로 PC도 고유 id를 쓴다
+function get_sender_id()
+{
+	let id = storage_get("sender_id");
+	if(!id)
+	{
+		id = "pc-" + Math.random().toString(36).slice(2, 8);
+		storage_set("sender_id", id);
+	}
+	return id;
+}
+
+function room_url(sub)
+{
+	return DB_URL + "/rooms/" + encodeURIComponent(room_code) + "/shared" + (sub || "") + ".json";
+}
+
+function set_status(text)
+{
+	$("status").textContent = text;
+}
+
+function set_dirty(value)
+{
+	dirty = value;
+	$("dirty_label").textContent = dirty ? "보내지 않은 변경 사항이 있습니다" : "";
+}
+
+function format_time(ts)
+{
+	if(!ts)
+		return "-";
+	return new Date(ts).toLocaleString("ko-KR");
+}
+
+async function load_room()
+{
+	const code = $("room_input").value.trim();
+	if(!code)
+	{
+		set_status("방 코드를 입력하세요");
+		return;
+	}
+	if(/[.#$\[\]\/]/.test(code))
+	{
+		set_status("방 코드에 . # $ [ ] / 는 쓸 수 없습니다");
+		return;
+	}
+	if(dirty && !confirm("보내지 않은 변경 사항이 사라집니다. 다시 불러올까요?"))
+		return;
+
+	room_code = code;
+	storage_set("room_code", code);
+	set_status("불러오는 중...");
+	try
+	{
+		const res = await fetch(room_url());
+		if(!res.ok)
+			throw new Error(res.status + " " + res.statusText);
+		const data = await res.json();
+		// Firebase는 배열을 {0:...,1:...} 객체로 돌려줄 수 있음
+		const raw = data && data.items ? Object.values(data.items) : [];
+		items = raw.filter(it => it && it.name).map(it => ({
+			name: String(it.name),
+			checked: !!it.checked,
+			image: it.image || ""
+		}));
+		loaded_timestamp = data ? data.timestamp || null : null;
+		set_dirty(false);
+		render();
+		if(data)
+			set_status(`마지막 보낸 시각 ${format_time(data.timestamp)} · 보낸 기기 ${data.sender || "-"} · ${items.length}개`);
+		else
+			set_status("이 방에는 아직 공유된 리스트가 없습니다");
+	}
+	catch(e)
+	{
+		set_status("불러오기 실패: " + e.message);
+	}
+}
+
+async function send_room()
+{
+	if(!room_code)
+	{
+		set_status("먼저 방 코드로 불러오세요");
+		return;
+	}
+	$("send_btn").disabled = true;
+	try
+	{
+		// 불러온 뒤 폰이 새로 보냈다면 덮어쓰기 전에 확인
+		const ts_res = await fetch(room_url("/timestamp"));
+		const server_ts = ts_res.ok ? await ts_res.json() : null;
+		if(server_ts !== loaded_timestamp && !confirm("불러온 뒤 서버 내용이 바뀌었습니다. 이 리스트로 덮어쓸까요?"))
+			return;
+
+		const body = {
+			items: items.map(it =>
+			{
+				const map = { name: it.name, checked: it.checked };
+				if(it.image)
+					map.image = it.image;
+				return map;
+			}),
+			sender: get_sender_id(),
+			timestamp: { ".sv": "timestamp" }
+		};
+		const res = await fetch(room_url(), { method: "PUT", body: JSON.stringify(body) });
+		if(!res.ok)
+			throw new Error(res.status + " " + res.statusText);
+		const saved = await res.json();
+		loaded_timestamp = saved.timestamp;
+		set_dirty(false);
+		set_status(`보내기 완료 · ${format_time(saved.timestamp)} · ${items.length}개`);
+	}
+	catch(e)
+	{
+		set_status("보내기 실패: " + e.message);
+	}
+	finally
+	{
+		$("send_btn").disabled = false;
+	}
+}
+
+function add_items(text)
+{
+	const names = text.split(/\r?\n/).map(s => s.trim()).filter(s => s);
+	let added = 0;
+	for(const name of names)
+	{
+		// 앱도 이름이 같으면 같은 항목으로 취급
+		if(items.some(it => it.name === name))
+			continue;
+		items.push({ name: name, checked: false, image: "" });
+		added++;
+	}
+	if(0 < added)
+	{
+		set_dirty(true);
+		render();
+	}
+	const skipped = names.length - added;
+	if(0 < skipped)
+		set_status(`${added}개 추가, ${skipped}개 중복 제외`);
+}
+
+function rename_item(index)
+{
+	const current = items[index].name;
+	const next = prompt("이름 수정", current);
+	if(next === null)
+		return;
+	const trimmed = next.trim();
+	if(!trimmed || trimmed === current)
+		return;
+	if(items.some(it => it.name === trimmed))
+	{
+		set_status("같은 이름의 항목이 이미 있습니다");
+		return;
+	}
+	items[index].name = trimmed;
+	set_dirty(true);
+	render();
+}
+
+function resize_image(blob)
+{
+	return new Promise((resolve, reject) =>
+	{
+		const url = URL.createObjectURL(blob);
+		const img = new Image();
+		img.onload = () =>
+		{
+			const scale = Math.min(MAX_DIM / img.width, MAX_DIM / img.height, 1);
+			const canvas = document.createElement("canvas");
+			canvas.width = Math.max(1, Math.round(img.width * scale));
+			canvas.height = Math.max(1, Math.round(img.height * scale));
+			const ctx = canvas.getContext("2d");
+			// 투명 PNG가 검게 나오지 않도록 흰 배경
+			ctx.fillStyle = "#ffffff";
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+			ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+			URL.revokeObjectURL(url);
+			resolve(canvas.toDataURL("image/jpeg", JPEG_QUALITY).split(",")[1]);
+		};
+		img.onerror = () =>
+		{
+			URL.revokeObjectURL(url);
+			reject(new Error("이미지를 읽을 수 없습니다"));
+		};
+		img.src = url;
+	});
+}
+
+async function attach_image(index, blob)
+{
+	try
+	{
+		items[index].image = await resize_image(blob);
+		set_dirty(true);
+		render();
+		set_status(`'${items[index].name}' 사진 첨부됨`);
+	}
+	catch(e)
+	{
+		set_status(e.message);
+	}
+}
+
+function make_button(label, on_click, extra_class)
+{
+	const btn = document.createElement("button");
+	btn.className = "small" + (extra_class ? " " + extra_class : "");
+	btn.textContent = label;
+	btn.addEventListener("click", e =>
+	{
+		e.stopPropagation();
+		on_click();
+	});
+	return btn;
+}
+
+function render()
+{
+	const list = $("list");
+	list.innerHTML = "";
+	if(items.length === 0)
+	{
+		const li = document.createElement("li");
+		li.className = "empty";
+		li.textContent = room_code ? "항목이 없습니다" : "방 코드를 입력하고 불러오세요";
+		list.appendChild(li);
+		return;
+	}
+	items.forEach((it, index) =>
+	{
+		const li = document.createElement("li");
+		li.tabIndex = 0;
+		li.dataset.index = index;
+		if(it.checked)
+			li.classList.add("checked");
+
+		const check = document.createElement("input");
+		check.type = "checkbox";
+		check.checked = it.checked;
+		check.addEventListener("change", () =>
+		{
+			it.checked = check.checked;
+			li.classList.toggle("checked", it.checked);
+			set_dirty(true);
+		});
+		li.appendChild(check);
+
+		const name = document.createElement("span");
+		name.className = "name";
+		name.textContent = it.name;
+		name.addEventListener("dblclick", () => rename_item(index));
+		li.appendChild(name);
+
+		if(it.image)
+		{
+			const thumb = document.createElement("img");
+			thumb.className = "thumb";
+			thumb.alt = it.name;
+			thumb.src = "data:image/jpeg;base64," + it.image;
+			thumb.addEventListener("click", e =>
+			{
+				e.stopPropagation();
+				$("viewer_img").src = thumb.src;
+				$("viewer").classList.add("show");
+			});
+			li.appendChild(thumb);
+		}
+
+		const actions = document.createElement("div");
+		actions.className = "actions";
+		actions.appendChild(make_button(it.image ? "사진 변경" : "사진", () =>
+		{
+			file_target = index;
+			$("file_input").value = "";
+			$("file_input").click();
+		}));
+		if(it.image)
+		{
+			actions.appendChild(make_button("사진 삭제", () =>
+			{
+				it.image = "";
+				set_dirty(true);
+				render();
+			}));
+		}
+		actions.appendChild(make_button("삭제", () =>
+		{
+			items.splice(index, 1);
+			set_dirty(true);
+			render();
+		}, "danger"));
+		li.appendChild(actions);
+
+		list.appendChild(li);
+	});
+}
+
+$("load_btn").addEventListener("click", load_room);
+$("room_input").addEventListener("keydown", e =>
+{
+	if(e.key === "Enter")
+		load_room();
+});
+
+$("add_btn").addEventListener("click", () =>
+{
+	add_items($("add_input").value);
+	$("add_input").value = "";
+	$("add_input").focus();
+});
+$("add_input").addEventListener("keydown", e =>
+{
+	if(e.key === "Enter")
+		$("add_btn").click();
+});
+// 여러 줄 텍스트를 붙여넣으면 한 줄씩 항목으로 추가
+$("add_input").addEventListener("paste", e =>
+{
+	const text = e.clipboardData.getData("text");
+	if(!/\r?\n/.test(text))
+		return;
+	e.preventDefault();
+	add_items(text);
+});
+
+$("send_btn").addEventListener("click", send_room);
+
+$("file_input").addEventListener("change", () =>
+{
+	const file = $("file_input").files[0];
+	if(file && file_target !== null)
+		attach_image(file_target, file);
+	file_target = null;
+});
+
+// 항목을 클릭(포커스)한 상태에서 Ctrl+V로 이미지 붙여넣기
+document.addEventListener("paste", e =>
+{
+	const li = document.activeElement && document.activeElement.closest ? document.activeElement.closest("li[data-index]") : null;
+	if(!li)
+		return;
+	const file = [...e.clipboardData.items].find(it => it.type.startsWith("image/"));
+	if(!file)
+		return;
+	e.preventDefault();
+	attach_image(Number(li.dataset.index), file.getAsFile());
+});
+
+$("viewer").addEventListener("click", () => $("viewer").classList.remove("show"));
+
+window.addEventListener("beforeunload", e =>
+{
+	if(!dirty)
+		return;
+	e.preventDefault();
+	e.returnValue = "";
+});
+
+$("room_input").value = storage_get("room_code") || "";
+render();
+if($("room_input").value)
+	load_room();
+</script>
+</body>
+</html>
