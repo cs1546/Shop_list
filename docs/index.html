@@ -57,6 +57,12 @@ h1
 	font-size: 22px;
 	margin: 0 0 16px;
 }
+.ver
+{
+	font-size: 12px;
+	font-weight: normal;
+	color: var(--sub);
+}
 .bar
 {
 	display: flex;
@@ -244,7 +250,7 @@ li.checked .name
 </head>
 <body>
 <div class="wrap">
-	<h1>쇼핑 체크리스트</h1>
+	<h1>쇼핑 체크리스트 <span id="page_ver" class="ver"></span></h1>
 
 	<div class="bar">
 		<input id="room_input" type="text" placeholder="방 코드" autocomplete="off">
@@ -283,6 +289,8 @@ const DB_URL = "https://shoplist-d6e26-default-rtdb.asia-southeast1.firebasedata
 // 앱의 compressImageToBase64와 같은 기준
 const MAX_DIM = 1024;
 const JPEG_QUALITY = 0.85;
+// 수정할 때마다 갱신 — 브라우저 캐시로 예전 페이지가 열렸는지 화면에서 확인용
+const PAGE_VERSION = "2026-11-27b";
 
 let room_code = "";
 let items = [];
@@ -382,10 +390,14 @@ async function load_room()
 			checked: !!it.checked,
 			// 앱과 같이 체크/해제 시각을 유지해야 폰에서 더 나중 기록을 판단할 수 있음
 			checked_at: Number(it.checked_at) || 0,
-			image: it.image || ""
+			image: it.image || "",
+			// 앱의 sort_order 역할 — 체크 해제 시 원래 자리로 돌아가도록 처음 순서를 기억
+			order: 0
 		}));
+		items.forEach((it, index) => it.order = index);
 		loaded_timestamp = data ? data.timestamp || null : null;
 		set_dirty(false);
+		sort_items();
 		render();
 		if(data)
 			set_status(`마지막 보낸 시각 ${format_time(data.timestamp)} · 보낸 기기 ${data.sender || "-"} · ${items.length}개`);
@@ -452,12 +464,15 @@ function add_items(text)
 		// 앱도 이름이 같으면 같은 항목으로 취급
 		if(items.some(it => it.name === name))
 			continue;
-		items.push({ name: name, checked: false, checked_at: 0, image: "" });
+		const next_order = items.reduce((max, it) => Math.max(max, it.order), -1) + 1;
+		items.push({ name: name, checked: false, checked_at: 0, image: "", order: next_order });
 		added++;
 	}
 	if(0 < added)
 	{
 		set_dirty(true);
+		// 새 항목이 체크된 항목 아래로 가지 않도록
+		sort_items();
 		render();
 	}
 	const skipped = names.length - added;
@@ -541,6 +556,12 @@ function make_button(label, on_click, extra_class)
 	return btn;
 }
 
+// 앱의 정렬(is_checked ASC, sort_order ASC)과 같게 맞춤
+function sort_items()
+{
+	items.sort((a, b) => (a.checked - b.checked) || (a.order - b.order));
+}
+
 function render()
 {
 	const list = $("list");
@@ -568,8 +589,10 @@ function render()
 		{
 			it.checked = check.checked;
 			it.checked_at = Date.now();
-			li.classList.toggle("checked", it.checked);
 			set_dirty(true);
+			// 앱처럼 체크한 항목은 바로 맨 아래로 이동
+			sort_items();
+			render();
 		});
 		li.appendChild(check);
 
@@ -684,6 +707,7 @@ window.addEventListener("beforeunload", e =>
 	e.returnValue = "";
 });
 
+$("page_ver").textContent = "웹 " + PAGE_VERSION;
 $("room_input").value = storage_get("room_code") || "";
 render();
 if($("room_input").value)
