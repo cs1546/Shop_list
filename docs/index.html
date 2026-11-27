@@ -253,8 +253,8 @@ li.checked .name
 	<div id="status" class="status"></div>
 
 	<div class="notice">
-		폰에서 받아오면 <b>새 항목 추가와 사진</b>만 기존 리스트에 합쳐집니다.
-		여기서 삭제·이름 변경·체크한 내용은 폰의 기존 항목에 반영되지 않습니다.
+		폰에서 받아오면 <b>새 항목, 사진, 체크/해제</b>가 기존 리스트에 합쳐집니다. 체크는 더 나중에 바꾼 쪽을 따릅니다.
+		여기서 삭제·이름 변경한 내용은 폰의 기존 항목에 반영되지 않습니다.
 		단, 폰이 마지막으로 주고받은 지 24시간이 지났다면 폰의 기존 리스트는 기록에 저장되고 이 리스트로 바뀝니다.
 	</div>
 
@@ -380,6 +380,8 @@ async function load_room()
 		items = raw.filter(it => it && it.name).map(it => ({
 			name: String(it.name),
 			checked: !!it.checked,
+			// 앱과 같이 체크/해제 시각을 유지해야 폰에서 더 나중 기록을 판단할 수 있음
+			checked_at: Number(it.checked_at) || 0,
 			image: it.image || ""
 		}));
 		loaded_timestamp = data ? data.timestamp || null : null;
@@ -415,7 +417,7 @@ async function send_room()
 		const body = {
 			items: items.map(it =>
 			{
-				const map = { name: it.name, checked: it.checked };
+				const map = { name: it.name, checked: it.checked, checked_at: it.checked_at };
 				if(it.image)
 					map.image = it.image;
 				return map;
@@ -450,7 +452,7 @@ function add_items(text)
 		// 앱도 이름이 같으면 같은 항목으로 취급
 		if(items.some(it => it.name === name))
 			continue;
-		items.push({ name: name, checked: false, image: "" });
+		items.push({ name: name, checked: false, checked_at: 0, image: "" });
 		added++;
 	}
 	if(0 < added)
@@ -565,6 +567,7 @@ function render()
 		check.addEventListener("change", () =>
 		{
 			it.checked = check.checked;
+			it.checked_at = Date.now();
 			li.classList.toggle("checked", it.checked);
 			set_dirty(true);
 		});

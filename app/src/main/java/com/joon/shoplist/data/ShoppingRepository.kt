@@ -16,20 +16,31 @@ class ShoppingRepository(
         dao.insert(ShoppingItem(name = name, sortOrder = dao.getMaxSortOrder() + 1))
     }
 
-    suspend fun importItem(name: String, isChecked: Boolean, imagePath: String): Boolean {
+    suspend fun importItem(name: String, isChecked: Boolean, checkedAt: Long, imagePath: String): Boolean {
         val existing = dao.findByName(name)
         if(existing != null) {
-            // 기존 항목은 로컬 체크 상태 유지 — 수신 데이터가 체크를 덮어쓰면 안 됨
-            if(imagePath.isEmpty())
+            // 체크/해제는 더 나중에 바뀐 쪽을 따름
+            // 양쪽 다 시각 기록이 없으면(구버전에서 보낸 데이터) 체크된 쪽을 따라 받는 쪽 체크가 풀리지 않게 함
+            val remoteWins = existing.checkedAt < checkedAt ||
+                    (checkedAt == 0L && existing.checkedAt == 0L && isChecked)
+            val mergedChecked = if(remoteWins) isChecked else existing.isChecked
+            val mergedCheckedAt = if(remoteWins) checkedAt else existing.checkedAt
+            val hasNewImage = imagePath.isNotEmpty()
+            if(!hasNewImage && mergedChecked == existing.isChecked && mergedCheckedAt == existing.checkedAt)
                 return false
-            if(existing.imagePath.isNotEmpty() && existing.imagePath != imagePath)
+            if(hasNewImage && existing.imagePath.isNotEmpty() && existing.imagePath != imagePath)
                 File(existing.imagePath).delete()
-            dao.update(existing.copy(imagePath = imagePath))
+            dao.update(existing.copy(
+                isChecked = mergedChecked,
+                checkedAt = mergedCheckedAt,
+                imagePath = if(hasNewImage) imagePath else existing.imagePath
+            ))
             return true
         }
         dao.insert(ShoppingItem(
             name = name,
             isChecked = isChecked,
+            checkedAt = checkedAt,
             imagePath = imagePath,
             sortOrder = dao.getMaxSortOrder() + 1
         ))
@@ -48,7 +59,7 @@ class ShoppingRepository(
     }
 
     suspend fun toggleCheck(item: ShoppingItem) {
-        dao.update(item.copy(isChecked = !item.isChecked))
+        dao.update(item.copy(isChecked = !item.isChecked, checkedAt = System.currentTimeMillis()))
     }
 
     suspend fun rename(item: ShoppingItem, newName: String) {

@@ -21,5 +21,9 @@ data class ShoppingItem(
     val imagePath: String = "",
 
     @ColumnInfo(name = "sort_order", defaultValue = "0")
-    val sortOrder: Long = 0L
+    val sortOrder: Long = 0L,
+
+    // 체크/해제한 시각 — 기기 간 공유 시 더 나중에 바뀐 쪽의 체크 상태를 따름 (0: 기록 없음)
+    @ColumnInfo(name = "checked_at", defaultValue = "0")
+    val checkedAt: Long = 0L
 )

@@ -231,7 +231,8 @@ class ShoppingViewModel(
                 val itemsList = items.value.map { item ->
                     val map = mutableMapOf<String, Any>(
                         "name" to item.name,
-                        "checked" to item.isChecked
+                        "checked" to item.isChecked,
+                        "checked_at" to item.checkedAt
                     )
                     if(item.imagePath.isNotEmpty() && File(item.imagePath).exists())
                     {
@@ -329,20 +330,21 @@ class ShoppingViewModel(
         {
             val name = itemSnap.child("name").getValue(String::class.java) ?: continue
             val checked = itemSnap.child("checked").getValue(Boolean::class.java) ?: false
+            val checkedAt = itemSnap.child("checked_at").getValue(Long::class.java) ?: 0L
             val imageB64 = itemSnap.child("image").getValue(String::class.java) ?: ""
 
             var localPath = ""
             if(imageB64.isNotEmpty())
                 localPath = saveBase64Image(imageB64)
 
-            if(name.isNotBlank() && repository.importItem(name.trim(), checked, localPath))
+            if(name.isNotBlank() && repository.importItem(name.trim(), checked, checkedAt, localPath))
                 added++
         }
         markSynced(code, serverTime)
         if(isNewTrip && localItems.isNotEmpty())
             _snackMessage.emit("이전 리스트를 저장하고 새 리스트 ${added}개를 받음")
         else if(0 < added)
-            _snackMessage.emit("${added}개 항목 추가됨")
+            _snackMessage.emit("${added}개 항목 반영됨")
         else if(manual)
             _snackMessage.emit("새로운 항목 없음")
     }

@@ -14,7 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         SavedShoppingList::class,
         SavedShoppingItem::class
     ],
-    version = 4,
+    version = 5,
     autoMigrations = [
         AutoMigration(from = 1, to = 2),
         AutoMigration(from = 2, to = 3)
@@ -36,6 +36,14 @@ abstract class AppDatabase : RoomDatabase()
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5)
+        {
+            override fun migrate(db: SupportSQLiteDatabase)
+            {
+                db.execSQL("ALTER TABLE shopping_items ADD COLUMN checked_at INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
@@ -46,7 +54,7 @@ abstract class AppDatabase : RoomDatabase()
                     AppDatabase::class.java,
                     "shopping.db"
                 )
-                    .addMigrations(MIGRATION_3_4)
+                    .addMigrations(MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { INSTANCE = it }
             }
